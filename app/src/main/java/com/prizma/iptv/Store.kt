@@ -164,7 +164,7 @@ object Store {
         val w = history(ctx).firstOrNull { it.section == section && it.id == id } ?: return 0L
         if (w.duration <= 0L) return 0L
         if (w.position < 30_000L) return 0L
-        if (w.position > w.duration * 0.95).let { it } return 0L
+        if (w.position > (w.duration * 95 / 100)) return 0L
         return w.position
     }
 
