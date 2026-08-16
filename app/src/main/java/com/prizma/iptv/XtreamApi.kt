@@ -20,13 +20,16 @@ data class Account(
     val activeConnections: String
 )
 
-data class Category(val id: String, val name: String)
+data class Category(val id: String, val name: String, val count: Int = 0)
 
 data class StreamItem(
     val id: String,
     val name: String,
     val icon: String,
-    val extension: String
+    val extension: String,
+    val categoryId: String,
+    val rating: String,
+    val added: Long
 )
 
 enum class Section(
@@ -45,7 +48,7 @@ object XtreamApi {
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(60, TimeUnit.SECONDS)
         .build()
 
     fun normalizeHost(raw: String): String {
@@ -101,7 +104,6 @@ object XtreamApi {
         val body = request(host, user, pass, "&action=" + section.categoryAction)
         val arr = try { JSONArray(body) } catch (e: Exception) { JSONArray() }
         val out = ArrayList<Category>()
-        out.add(Category("", "Tümü"))
         for (i in 0 until arr.length()) {
             val o = arr.optJSONObject(i) ?: continue
             out.add(
@@ -114,11 +116,10 @@ object XtreamApi {
         return out
     }
 
-    suspend fun streams(
-        host: String, user: String, pass: String, section: Section, categoryId: String
+    suspend fun allStreams(
+        host: String, user: String, pass: String, section: Section
     ): List<StreamItem> {
-        val extra = if (categoryId.isEmpty()) "" else "&category_id=" + enc(categoryId)
-        val body = request(host, user, pass, "&action=" + section.streamAction + extra)
+        val body = request(host, user, pass, "&action=" + section.streamAction)
         val arr = try { JSONArray(body) } catch (e: Exception) { JSONArray() }
         val out = ArrayList<StreamItem>(arr.length())
         for (i in 0 until arr.length()) {
@@ -128,10 +129,30 @@ object XtreamApi {
                     id = o.opt(section.idKey)?.toString().orEmpty(),
                     name = o.optString("name", "Adsız"),
                     icon = o.optString(section.iconKey, ""),
-                    extension = o.optString("container_extension", "")
+                    extension = o.optString("container_extension", ""),
+                    categoryId = o.opt("category_id")?.toString().orEmpty(),
+                    rating = parseRating(o),
+                    added = parseAdded(o)
                 )
             )
         }
         return out
+    }
+
+    private fun parseRating(o: JSONObject): String {
+        val five = o.opt("rating_5based")?.toString()?.toDoubleOrNull()
+        val ten = o.opt("rating")?.toString()?.toDoubleOrNull()
+        val v = when {
+            five != null && five > 0.0 -> five
+            ten != null && ten > 0.0 -> ten / 2.0
+            else -> return ""
+        }
+        return String.format(Locale.getDefault(), "%.1f", v)
+    }
+
+    private fun parseAdded(o: JSONObject): Long {
+        val a = o.opt("added")?.toString()?.toLongOrNull()
+        if (a != null) return a
+        return o.opt("last_modified")?.toString()?.toLongOrNull() ?: 0L
     }
 }
