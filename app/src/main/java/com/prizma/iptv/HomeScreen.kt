@@ -1,16 +1,15 @@
 package com.prizma.iptv
 
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -35,6 +34,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -49,6 +49,7 @@ fun HomeScreen(
     account: Account,
     onLogout: () -> Unit
 ) {
+    val ctx = LocalContext.current
     var section by remember { mutableStateOf(Section.LIVE) }
     var categories by remember { mutableStateOf<List<Category>>(emptyList()) }
     var openCategory by remember { mutableStateOf<Category?>(null) }
@@ -87,10 +88,16 @@ fun HomeScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(Modifier.weight(1f)) {
-                    Text("PRIZMA IPTV", color = PrizmaAccent, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        "PRIZMA IPTV",
+                        color = PrizmaAccent,
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                     Text(
                         "${account.username} · Bitiş: ${account.expiry} · ${account.activeConnections}/${account.maxConnections} bağlantı",
-                        color = Color(0xFF7C828A), fontSize = 11.sp
+                        color = Color(0xFF7C828A),
+                        fontSize = 11.sp
                     )
                 }
                 TextButton(onClick = onLogout) { Text("Çıkış", fontSize = 13.sp) }
@@ -119,7 +126,12 @@ fun HomeScreen(
                         .padding(horizontal = 16.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("‹  ${cat.name}", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                    Text(
+                        "‹  ${cat.name}",
+                        color = Color.White,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium
+                    )
                     Spacer(Modifier.weight(1f))
                     Text("${streams.size}", color = Color(0xFF7C828A), fontSize = 12.sp)
                 }
@@ -132,25 +144,42 @@ fun HomeScreen(
                         color = PrizmaAccent,
                         modifier = Modifier.align(Alignment.Center)
                     )
+
                     error.isNotEmpty() -> Text(
                         error,
                         color = Color(0xFFFF6B6B),
                         fontSize = 13.sp,
                         modifier = Modifier.align(Alignment.Center).padding(24.dp)
                     )
+
                     cat == null -> LazyColumn(Modifier.fillMaxSize()) {
                         items(categories) { c ->
                             RowItem(title = c.name, icon = null) { openCategory = c }
                         }
                     }
+
                     streams.isEmpty() -> Text(
                         "Bu kategoride içerik yok.",
                         color = Color(0xFF7C828A),
                         modifier = Modifier.align(Alignment.Center)
                     )
+
                     else -> LazyColumn(Modifier.fillMaxSize()) {
                         items(streams) { s ->
-                            RowItem(title = s.name, icon = s.icon) { }
+                            RowItem(title = s.name, icon = s.icon) {
+                                if (section == Section.SERIES) {
+                                    Toast.makeText(
+                                        ctx,
+                                        "Dizi bölümleri sonraki adımda",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                } else {
+                                    val ext = if (s.extension.isNotEmpty()) s.extension else "ts"
+                                    val folder = if (section == Section.LIVE) "live" else "movie"
+                                    val url = "$host/$folder/$user/$pass/${s.id}.$ext"
+                                    PlayerActivity.start(ctx, url, s.name)
+                                }
+                            }
                         }
                     }
                 }
