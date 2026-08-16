@@ -8,6 +8,7 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -18,10 +19,19 @@ val PrizmaBg = Color(0xFF101014)
 val PrizmaSurface = Color(0xFF1A1A21)
 val PrizmaAccent = Color(0xFF4F8DF7)
 
+object Refresh {
+    var tick by mutableIntStateOf(0)
+}
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent { PrizmaApp() }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        Refresh.tick++
     }
 }
 
