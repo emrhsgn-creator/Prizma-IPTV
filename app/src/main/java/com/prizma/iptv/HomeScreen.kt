@@ -40,6 +40,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -74,7 +75,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
-import androidx.compose.material.icons.filled.Settings
 
 private val BarStart = Color(0xFF23306E)
 private val BarEnd = Color(0xFF5B3FA8)
@@ -133,6 +133,28 @@ private fun launchTile(ctx: Context, host: String, user: String, pass: String, t
     PlayerActivity.start(
         ctx, "$host/$folder/$user/$pass/${t.id}.$e", t.name,
         t.sectionName, t.id, t.icon, e, !live
+    )
+}
+
+private fun playLiveList(
+    ctx: Context, host: String, user: String, pass: String,
+    all: List<Tile>, picked: Tile
+) {
+    val liveTiles = all.filter { it.sectionName == Section.LIVE.name }
+    val idx = liveTiles.indexOfFirst { it.id == picked.id }
+    PlayerActivity.startPlaylist(
+        ctx = ctx,
+        urls = ArrayList(liveTiles.map {
+            val e = if (it.ext.isNotEmpty()) it.ext else "ts"
+            "$host/live/$user/$pass/${it.id}.$e"
+        }),
+        titles = ArrayList(liveTiles.map { it.name }),
+        ids = ArrayList(liveTiles.map { it.id }),
+        icons = ArrayList(liveTiles.map { it.icon }),
+        exts = ArrayList(liveTiles.map { it.ext }),
+        startIndex = if (idx >= 0) idx else 0,
+        section = Section.LIVE.name,
+        resumable = false
     )
 }
 
@@ -389,6 +411,18 @@ fun HomeScreen(
                         .map { it.toTile(sec.name) }
                 }
 
+                val toggleFav: (Tile) -> Unit = { t ->
+                    val added = Store.toggleFavorite(
+                        ctx, t.sectionName, t.id, t.name, t.icon, t.ext, t.rating
+                    )
+                    localRev++
+                    Toast.makeText(
+                        ctx,
+                        if (added) "Favorilere eklendi" else "Favorilerden çıkarıldı",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+
                 val body: @Composable () -> Unit = {
                     Column(Modifier.fillMaxSize()) {
                         if (showingFav) {
@@ -405,41 +439,16 @@ fun HomeScreen(
                             tiles = tiles,
                             favIds = favIds,
                             showMove = showingFav && sortMode == SortMode.MANUAL,
+                            showFavButton = sec == Section.LIVE,
                             onClick = { t ->
                                 if (t.sectionName == Section.LIVE.name) {
-                                    val liveTiles = tiles.filter {
-                                        it.sectionName == Section.LIVE.name
-                                    }
-                                    val idx = liveTiles.indexOfFirst { it.id == t.id }
-                                    PlayerActivity.startPlaylist(
-                                        ctx = ctx,
-                                        urls = ArrayList(liveTiles.map {
-                                            val e = if (it.ext.isNotEmpty()) it.ext else "ts"
-                                            "$host/live/$user/$pass/${it.id}.$e"
-                                        }),
-                                        titles = ArrayList(liveTiles.map { it.name }),
-                                        ids = ArrayList(liveTiles.map { it.id }),
-                                        icons = ArrayList(liveTiles.map { it.icon }),
-                                        exts = ArrayList(liveTiles.map { it.ext }),
-                                        startIndex = if (idx >= 0) idx else 0,
-                                        section = Section.LIVE.name,
-                                        resumable = false
-                                    )
+                                    playLiveList(ctx, host, user, pass, tiles, t)
                                 } else {
                                     launchTile(ctx, host, user, pass, t)
                                 }
                             },
-                            onLong = { t ->
-                                val added = Store.toggleFavorite(
-                                    ctx, t.sectionName, t.id, t.name, t.icon, t.ext, t.rating
-                                )
-                                localRev++
-                                Toast.makeText(
-                                    ctx,
-                                    if (added) "Favorilere eklendi" else "Favorilerden çıkarıldı",
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                            },
+                            onLong = toggleFav,
+                            onFav = toggleFav,
                             onMove = { t, d ->
                                 Store.moveFavorite(ctx, sec.name, t.id, d)
                                 localRev++
@@ -564,21 +573,17 @@ private fun HistoryTab(
                 Text("Geçmişi temizle", color = Color(0xFFC3C8D4), fontSize = 12.sp)
             }
         }
-        Text(
-            "Bir kaydı uzun basarak silebilirsin.",
-            color = Muted,
-            fontSize = 10.sp,
-            modifier = Modifier.padding(start = 14.dp, bottom = 6.dp)
-        )
         TileGrid(
             tiles = hist.map { it.toTile() },
             favIds = emptySet(),
             showMove = false,
+            showFavButton = false,
             onClick = { t -> launchTile(ctx, host, user, pass, t) },
             onLong = { t ->
                 onRemove(t)
                 Toast.makeText(ctx, "Geçmişten silindi", Toast.LENGTH_SHORT).show()
             },
+            onFav = { },
             onMove = { _, _ -> }
         )
     }
@@ -812,8 +817,10 @@ private fun TileGrid(
     tiles: List<Tile>,
     favIds: Set<String>,
     showMove: Boolean,
+    showFavButton: Boolean,
     onClick: (Tile) -> Unit,
     onLong: (Tile) -> Unit,
+    onFav: (Tile) -> Unit,
     onMove: (Tile, Int) -> Unit
 ) {
     if (tiles.isEmpty()) {
@@ -835,8 +842,10 @@ private fun TileGrid(
                 t = t,
                 fav = favIds.contains(t.id),
                 showMove = showMove,
+                showFavButton = showFavButton,
                 onClick = { onClick(t) },
                 onLongClick = { onLong(t) },
+                onFav = { onFav(t) },
                 onLeft = { onMove(t, -1) },
                 onRight = { onMove(t, 1) }
             )
@@ -850,8 +859,10 @@ private fun PosterTile(
     t: Tile,
     fav: Boolean,
     showMove: Boolean,
+    showFavButton: Boolean,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
+    onFav: () -> Unit,
     onLeft: () -> Unit,
     onRight: () -> Unit
 ) {
@@ -908,7 +919,7 @@ private fun PosterTile(
                 )
             }
             if (t.rating.isNotEmpty()) RatingBadge(Modifier.align(Alignment.TopEnd), t.rating)
-            if (fav) {
+            if (fav && !showFavButton) {
                 Icon(
                     Icons.Default.Star, null,
                     tint = Color(0xFFF5C518),
@@ -927,19 +938,48 @@ private fun PosterTile(
                         .background(PrizmaAccent)
                 )
             }
-            if (live) {
+        }
+
+        if (showFavButton) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Row(
+                    Modifier
+                        .weight(1f)
+                        .tvFocus(RoundedCornerShape(6.dp), 1.0f)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(if (fav) Color(0x33F5C518) else PrizmaSurface)
+                        .clickable(onClick = onFav)
+                        .padding(vertical = 5.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.Star, null,
+                        tint = if (fav) Color(0xFFF5C518) else Color(0xFF6E7686),
+                        modifier = Modifier.size(12.dp)
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        if (fav) "Favoride" else "Favori",
+                        color = if (fav) Color(0xFFF5C518) else Color(0xFF8A90A0),
+                        fontSize = 9.sp
+                    )
+                }
                 Box(
                     Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(5.dp)
-                        .tvFocus(CircleShape, 1.15f)
-                        .clip(CircleShape)
-                        .background(Color(0xCC000000))
+                        .tvFocus(RoundedCornerShape(6.dp), 1.0f)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(PrizmaSurface)
                         .clickable { showEpg = true }
-                        .size(22.dp),
+                        .padding(horizontal = 12.dp, vertical = 5.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("i", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text("i", color = Color(0xFF8A90A0), fontSize = 10.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -988,21 +1028,6 @@ private fun PosterTile(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-            Spacer(Modifier.height(2.dp))
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .height(2.dp)
-                    .clip(RoundedCornerShape(1.dp))
-                    .background(Color(0xFF2A2E3A))
-            ) {
-                Box(
-                    Modifier
-                        .fillMaxWidth(nowProgress)
-                        .height(2.dp)
-                        .background(PrizmaAccent)
-                )
-            }
         }
     }
 }
