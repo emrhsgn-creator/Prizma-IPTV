@@ -39,6 +39,11 @@
             android:exported="false"
             android:configChanges="orientation|screenSize|keyboardHidden"
             android:theme="@style/Theme.Prizma" />
+        <activity
+            android:name=".MovieActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:theme="@style/Theme.Prizma" />
 
     </application>
 </manifest>
