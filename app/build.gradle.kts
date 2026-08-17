@@ -15,6 +15,31 @@ android {
         versionCode = 2
         versionName = "0.2"
     }
+signingConfigs {
+        create("release") {
+            val ksFile = rootProject.file("prizma.jks")
+            if (ksFile.exists()) {
+                storeFile = ksFile
+                storePassword = "prizma2026"
+                keyAlias = "prizma"
+                keyPassword = "prizma2026"
+            }
+        }
+    }
+
+    buildTypes {
+        getByName("debug") {
+            if (rootProject.file("prizma.jks").exists()) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+        }
+        getByName("release") {
+            isMinifyEnabled = false
+            if (rootProject.file("prizma.jks").exists()) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+        }
+    }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
