@@ -1,0 +1,27 @@
+name: Anahtar uret
+
+on:
+  workflow_dispatch:
+
+jobs:
+  keygen:
+    runs-on: ubuntu-latest
+    steps:
+      - name: JDK 17 kur
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Keystore olustur
+        run: |
+          keytool -genkeypair -v \
+            -keystore prizma.jks \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -alias prizma \
+            -storepass prizma2026 -keypass prizma2026 \
+            -dname "CN=Prizma IPTV, OU=Personal, O=Prizma, L=Istanbul, C=TR"
+          echo "--- KEYSTORE_BASE64 (asagidaki blogu tamamen kopyala) ---"
+          base64 -w 0 prizma.jks
+          echo ""
+          echo "--- BITTI ---"
