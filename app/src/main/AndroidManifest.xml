@@ -8,12 +8,15 @@
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
 
     <application
+        android:name=".PrizmaApplication"
         android:allowBackup="true"
         android:label="Prizma IPTV"
         android:icon="@drawable/ic_launcher"
         android:banner="@drawable/ic_banner"
         android:supportsRtl="true"
         android:usesCleartextTraffic="true"
+        android:largeHeap="true"
+        android:hardwareAccelerated="true"
         android:theme="@style/Theme.Prizma">
 
         <activity
