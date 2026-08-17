@@ -405,7 +405,30 @@ fun HomeScreen(
                             tiles = tiles,
                             favIds = favIds,
                             showMove = showingFav && sortMode == SortMode.MANUAL,
-                            onClick = { t -> launchTile(ctx, host, user, pass, t) },
+                            onClick = { t ->
+                                if (t.sectionName == Section.LIVE.name) {
+                                    val liveTiles = tiles.filter {
+                                        it.sectionName == Section.LIVE.name
+                                    }
+                                    val idx = liveTiles.indexOfFirst { it.id == t.id }
+                                    PlayerActivity.startPlaylist(
+                                        ctx = ctx,
+                                        urls = ArrayList(liveTiles.map {
+                                            val e = if (it.ext.isNotEmpty()) it.ext else "ts"
+                                            "$host/live/$user/$pass/${it.id}.$e"
+                                        }),
+                                        titles = ArrayList(liveTiles.map { it.name }),
+                                        ids = ArrayList(liveTiles.map { it.id }),
+                                        icons = ArrayList(liveTiles.map { it.icon }),
+                                        exts = ArrayList(liveTiles.map { it.ext }),
+                                        startIndex = if (idx >= 0) idx else 0,
+                                        section = Section.LIVE.name,
+                                        resumable = false
+                                    )
+                                } else {
+                                    launchTile(ctx, host, user, pass, t)
+                                }
+                            },
                             onLong = { t ->
                                 val added = Store.toggleFavorite(
                                     ctx, t.sectionName, t.id, t.name, t.icon, t.ext, t.rating
