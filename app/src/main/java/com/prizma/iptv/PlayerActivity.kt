@@ -10,7 +10,6 @@ import androidx.activity.compose.setContent
 import androidx.annotation.OptIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -43,7 +42,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -218,6 +216,8 @@ fun PlayerScreen(
             .build()
         ExoPlayer.Builder(ctx)
             .setLoadControl(loadControl)
+            .setSeekBackIncrementMs(10_000)
+            .setSeekForwardIncrementMs(30_000)
             .setMediaSourceFactory(DefaultMediaSourceFactory(http))
             .build().apply {
                 setMediaItems(urls.map { MediaItem.fromUri(it) })
@@ -230,12 +230,8 @@ fun PlayerScreen(
             }
     }
 
-    fun flash(msg: String) {
-        notice = msg
-    }
-
     LaunchedEffect(Unit) {
-        if (startAt > 0) flash("Kaldığın yerden devam ediliyor")
+        if (startAt > 0) notice = "Kaldığın yerden devam ediliyor"
         while (true) {
             delay(5000)
             val i = player.currentMediaItemIndex
@@ -276,7 +272,7 @@ fun PlayerScreen(
                 current = i
                 error = ""
                 if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO && hasList) {
-                    flash("Sonraki: ${titleAt(i)}")
+                    notice = "Sonraki: ${titleAt(i)}"
                 }
             }
         }
@@ -342,33 +338,30 @@ fun PlayerScreen(
             }
         )
 
-        Box(
-            Modifier
-                .fillMaxSize()
-                .pointerInput(locked) {
-                    if (locked) return@pointerInput
-                    detectTapGestures(
-                        onTap = {
-                            val v = viewRef
-                            if (v != null) {
-                                if (v.isControllerFullyVisible) v.hideController()
-                                else v.showController()
-                            }
-                        },
-                        onDoubleTap = { off ->
-                            if (off.x < size.width / 3f) {
-                                player.seekTo((player.currentPosition - 10_000).coerceAtLeast(0))
-                                flash("−10 sn")
-                            } else if (off.x > size.width * 2f / 3f) {
-                                player.seekTo(player.currentPosition + 10_000)
-                                flash("+10 sn")
-                            }
-                        }
-                    )
-                }
-        )
-
-        if (!locked) {
+        if (locked) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .clickable(indication = null, interactionSource = remember {
+                        androidx.compose.foundation.interaction.MutableInteractionSource()
+                    }) { }
+            )
+            Box(
+                Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(12.dp)
+                    .clip(CircleShape)
+                    .background(Color(0xAA000000))
+                    .clickable {
+                        locked = false
+                        notice = "Kilit açıldı"
+                    }
+                    .size(44.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("🔓", fontSize = 16.sp)
+            }
+        } else {
             Row(
                 modifier = Modifier
                     .align(Alignment.TopStart)
@@ -381,7 +374,7 @@ fun PlayerScreen(
                 RoundBtn("🔒", 14.sp) {
                     locked = true
                     viewRef?.hideController()
-                    flash("Kilitlendi · açmak için sağ üst")
+                    notice = "Kilitlendi · sağ üstten aç"
                 }
                 Text(
                     titleAt(current),
@@ -404,22 +397,6 @@ fun PlayerScreen(
                 }
                 RoundBtn("⋮", 18.sp) { showMenu = true }
             }
-        } else {
-            Box(
-                Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(12.dp)
-                    .clip(CircleShape)
-                    .background(Color(0xAA000000))
-                    .clickable {
-                        locked = false
-                        flash("Kilit açıldı")
-                    }
-                    .size(44.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text("🔓", fontSize = 16.sp)
-            }
         }
 
         if (notice.isNotEmpty()) {
@@ -428,7 +405,8 @@ fun PlayerScreen(
                 color = Color.White,
                 fontSize = 12.sp,
                 modifier = Modifier
-                    .align(Alignment.Center)
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 90.dp)
                     .clip(RoundedCornerShape(8.dp))
                     .background(Color(0xAA000000))
                     .padding(horizontal = 14.dp, vertical = 8.dp)
@@ -440,9 +418,7 @@ fun PlayerScreen(
                 error,
                 color = Color(0xFFFF6B6B),
                 fontSize = 14.sp,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 70.dp)
+                modifier = Modifier.align(Alignment.Center)
             )
         }
 
@@ -525,6 +501,7 @@ private fun SettingsPanel(
                 .fillMaxHeight()
                 .width(310.dp)
                 .background(Color(0xF21A1B23))
+                .clickable(enabled = false) { }
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp)
         ) {
@@ -586,10 +563,9 @@ private fun SettingsPanel(
 
             Spacer(Modifier.height(20.dp))
             Text(
-                "Ekrana bir kez dokun: kontroller. Sola/sağa çift dokun: 10 sn atla.",
+                "Geri tuşu paneli kapatır.",
                 color = Color(0xFF6E7686),
-                fontSize = 10.sp,
-                lineHeight = 14.sp
+                fontSize = 10.sp
             )
         }
     }
