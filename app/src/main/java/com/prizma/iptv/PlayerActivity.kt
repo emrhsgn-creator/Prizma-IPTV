@@ -20,12 +20,9 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -48,8 +45,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -62,6 +61,7 @@ import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.AspectRatioFrameLayout
@@ -154,11 +154,9 @@ private fun collectTracks(tracks: Tracks, type: Int): List<TrackOption> {
                             .replaceFirstChar { it.uppercase() }
                     else -> "Kanal ${ti + 1}"
                 }
-                val extra = when (type) {
-                    C.TRACK_TYPE_AUDIO ->
-                        if (f.channelCount > 0) " · ${f.channelCount}ch" else ""
-                    else -> ""
-                }
+                val extra = if (type == C.TRACK_TYPE_AUDIO && f.channelCount > 0) {
+                    " · ${f.channelCount}ch"
+                } else ""
                 out.add(TrackOption(name + extra, gi, ti, group.isTrackSelected(ti)))
             }
         }
@@ -190,6 +188,7 @@ fun PlayerScreen(
     var speed by remember { mutableFloatStateOf(1f) }
     var subSize by remember { mutableFloatStateOf(0.06f) }
     var tracks by remember { mutableStateOf<Tracks?>(null) }
+    var viewRef by remember { mutableStateOf<PlayerView?>(null) }
 
     val hasList = urls.size > 1
     val resizeModes = listOf(
@@ -214,13 +213,8 @@ fun PlayerScreen(
             .setConnectTimeoutMs(15000)
             .setReadTimeoutMs(20000)
         val sec = Prefs.bufferSeconds(ctx)
-        val loadControl = androidx.media3.exoplayer.DefaultLoadControl.Builder()
-            .setBufferDurationsMs(
-                sec * 1000,
-                sec * 2000,
-                1500,
-                3000
-            )
+        val loadControl = DefaultLoadControl.Builder()
+            .setBufferDurationsMs(sec * 1000, sec * 2000, 1500, 3000)
             .build()
         ExoPlayer.Builder(ctx)
             .setLoadControl(loadControl)
@@ -323,7 +317,7 @@ fun PlayerScreen(
                     setShowSubtitleButton(true)
                     setShowNextButton(hasList)
                     setShowPreviousButton(hasList)
-                    controllerShowTimeoutMs = 3500
+                    controllerShowTimeoutMs = 4000
                     keepScreenOn = true
                     isFocusable = true
                     isFocusableInTouchMode = false
@@ -338,6 +332,7 @@ fun PlayerScreen(
                             null
                         )
                     )
+                    viewRef = this
                 }
             },
             update = { v ->
@@ -353,6 +348,13 @@ fun PlayerScreen(
                 .pointerInput(locked) {
                     if (locked) return@pointerInput
                     detectTapGestures(
+                        onTap = {
+                            val v = viewRef
+                            if (v != null) {
+                                if (v.isControllerFullyVisible) v.hideController()
+                                else v.showController()
+                            }
+                        },
                         onDoubleTap = { off ->
                             if (off.x < size.width / 3f) {
                                 player.seekTo((player.currentPosition - 10_000).coerceAtLeast(0))
@@ -374,7 +376,13 @@ fun PlayerScreen(
                     .padding(10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                TopBtn("‹", 24.sp) { onBack() }
+                RoundBtn("‹", 24.sp) { onBack() }
+                Spacer(Modifier.width(8.dp))
+                RoundBtn("🔒", 14.sp) {
+                    locked = true
+                    viewRef?.hideController()
+                    flash("Kilitlendi · açmak için sağ üst")
+                }
                 Text(
                     titleAt(current),
                     color = Color.White,
@@ -384,7 +392,7 @@ fun PlayerScreen(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier
                         .weight(1f)
-                        .padding(horizontal = 6.dp)
+                        .padding(horizontal = 10.dp)
                 )
                 if (speed != 1f) {
                     Text(
@@ -394,9 +402,7 @@ fun PlayerScreen(
                         modifier = Modifier.padding(end = 8.dp)
                     )
                 }
-                TopBtn("🔒", 14.sp) { locked = true; flash("Kilitlendi") }
-                Spacer(Modifier.width(6.dp))
-                TopBtn("⋮", 18.sp) { showMenu = true }
+                RoundBtn("⋮", 18.sp) { showMenu = true }
             }
         } else {
             Box(
@@ -404,12 +410,15 @@ fun PlayerScreen(
                     .align(Alignment.TopEnd)
                     .padding(12.dp)
                     .clip(CircleShape)
-                    .background(Color(0x88000000))
-                    .clickable { locked = false; flash("Kilit açıldı") }
-                    .size(40.dp),
+                    .background(Color(0xAA000000))
+                    .clickable {
+                        locked = false
+                        flash("Kilit açıldı")
+                    }
+                    .size(44.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text("🔓", fontSize = 15.sp)
+                Text("🔓", fontSize = 16.sp)
             }
         }
 
@@ -455,16 +464,16 @@ fun PlayerScreen(
 }
 
 @Composable
-private fun TopBtn(label: String, size: androidx.compose.ui.unit.TextUnit, onClick: () -> Unit) {
+private fun RoundBtn(label: String, size: TextUnit, onClick: () -> Unit) {
     Box(
         Modifier
             .clip(CircleShape)
-            .background(Color(0x66000000))
+            .background(Color(0x77000000))
             .clickable(onClick = onClick)
-            .size(36.dp),
+            .size(38.dp),
         contentAlignment = Alignment.Center
     ) {
-        Text(label, color = Color.White, fontSize = size)
+        Text(label, color = Color.White, style = TextStyle(fontSize = size))
     }
 }
 
@@ -529,7 +538,7 @@ private fun SettingsPanel(
 
             GroupTitle("Ses")
             if (audio.isEmpty()) {
-                Muted("Ses kanalı bulunamadı")
+                Text("Ses kanalı bulunamadı", color = Color(0xFF6E7686), fontSize = 12.sp)
             } else {
                 audio.forEach { a ->
                     OptRow(a.label, a.selected) { applyTrack(C.TRACK_TYPE_AUDIO, a) }
@@ -548,8 +557,8 @@ private fun SettingsPanel(
                 GroupTitle("Altyazı boyutu")
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf(0.04f to "Küçük", 0.06f to "Orta", 0.09f to "Büyük")
-                        .forEach { (v, label) ->
-                            Pill(label, subSize == v) { onSubSize(v) }
+                        .forEach { pair ->
+                            Pill(pair.second, subSize == pair.first) { onSubSize(pair.first) }
                         }
                 }
             }
@@ -577,7 +586,7 @@ private fun SettingsPanel(
 
             Spacer(Modifier.height(20.dp))
             Text(
-                "Ekranın soluna/sağına çift dokunarak 10 sn atlayabilirsin.",
+                "Ekrana bir kez dokun: kontroller. Sola/sağa çift dokun: 10 sn atla.",
                 color = Color(0xFF6E7686),
                 fontSize = 10.sp,
                 lineHeight = 14.sp
@@ -590,11 +599,6 @@ private fun SettingsPanel(
 private fun GroupTitle(t: String) {
     Text(t, color = PrizmaAccent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
     Spacer(Modifier.height(6.dp))
-}
-
-@Composable
-private fun Muted(t: String) {
-    Text(t, color = Color(0xFF6E7686), fontSize = 12.sp)
 }
 
 @Composable
