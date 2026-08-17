@@ -170,6 +170,7 @@ fun HomeScreen(
     var sortMode by remember { mutableStateOf(SortMode.MANUAL) }
 
     LaunchedEffect(Unit) {
+        Creds.host = host; Creds.user = user; Creds.pass = pass
         if (isTv) runCatching { firstTab.requestFocus() }
     }
 
@@ -764,6 +765,30 @@ private fun PosterTile(
     onRight: () -> Unit
 ) {
     val live = t.sectionName == Section.LIVE.name
+    var showEpg by remember { mutableStateOf(false) }
+    var nowPlaying by remember { mutableStateOf("") }
+    var nowProgress by remember { mutableStateOf(0f) }
+
+    if (live) {
+        LaunchedEffect(t.id) {
+            try {
+                val list = XtreamApi.shortEpg(Creds.host, Creds.user, Creds.pass, t.id, 2)
+                val sec = System.currentTimeMillis() / 1000
+                val cur = list.firstOrNull { sec in it.start..it.stop }
+                if (cur != null) {
+                    nowPlaying = cur.title
+                    nowProgress = epgProgress(sec, cur.start, cur.stop)
+                }
+            } catch (e: Exception) {
+                // akış yoksa sessizce boş kalır
+            }
+        }
+    }
+
+    if (showEpg) {
+        EpgDialog(t.id, t.name) { showEpg = false }
+    }
+
     Column {
         Box(
             Modifier
@@ -806,7 +831,83 @@ private fun PosterTile(
                         .background(PrizmaAccent)
                 )
             }
+            if (live) {
+                Box(
+                    Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(5.dp)
+                        .tvFocus(CircleShape, 1.15f)
+                        .clip(CircleShape)
+                        .background(Color(0xCC000000))
+                        .clickable { showEpg = true }
+                        .size(22.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("i", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+            }
         }
+
+        if (showMove) {
+            Row(
+                Modifier.fillMaxWidth().padding(top = 3.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                Text(
+                    "◀", color = PrizmaAccent, fontSize = 14.sp,
+                    modifier = Modifier
+                        .tvFocus(RoundedCornerShape(4.dp), 1.0f)
+                        .clip(RoundedCornerShape(4.dp))
+                        .clickable(onClick = onLeft)
+                        .padding(horizontal = 12.dp, vertical = 2.dp)
+                )
+                Text(
+                    "▶", color = PrizmaAccent, fontSize = 14.sp,
+                    modifier = Modifier
+                        .tvFocus(RoundedCornerShape(4.dp), 1.0f)
+                        .clip(RoundedCornerShape(4.dp))
+                        .clickable(onClick = onRight)
+                        .padding(horizontal = 12.dp, vertical = 2.dp)
+                )
+            }
+        }
+
+        Spacer(Modifier.height(6.dp))
+        Text(
+            t.name,
+            color = Color(0xFFE6E8EB),
+            fontSize = 11.sp,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            lineHeight = 14.sp
+        )
+
+        if (live && nowPlaying.isNotEmpty()) {
+            Text(
+                nowPlaying,
+                color = PrizmaAccent,
+                fontSize = 9.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(Modifier.height(2.dp))
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(2.dp)
+                    .clip(RoundedCornerShape(1.dp))
+                    .background(Color(0xFF2A2E3A))
+            ) {
+                Box(
+                    Modifier
+                        .fillMaxWidth(nowProgress)
+                        .height(2.dp)
+                        .background(PrizmaAccent)
+                )
+            }
+        }
+    }
+}
 
         if (showMove) {
             Row(
