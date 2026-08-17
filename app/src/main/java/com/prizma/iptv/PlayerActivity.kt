@@ -50,23 +50,39 @@ class PlayerActivity : ComponentActivity() {
 
     companion object {
         fun start(
-            ctx: Context,
-            url: String,
-            title: String,
-            section: String,
-            id: String,
-            icon: String,
-            ext: String,
-            resumable: Boolean
+            ctx: Context, url: String, title: String, section: String,
+            id: String, icon: String, ext: String, resumable: Boolean
         ) {
             val i = Intent(ctx, PlayerActivity::class.java)
-            i.putExtra("url", url)
-            i.putExtra("title", title)
+            i.putStringArrayListExtra("urls", arrayListOf(url))
+            i.putStringArrayListExtra("titles", arrayListOf(title))
+            i.putStringArrayListExtra("ids", arrayListOf(id))
+            i.putStringArrayListExtra("icons", arrayListOf(icon))
+            i.putStringArrayListExtra("exts", arrayListOf(ext))
             i.putExtra("section", section)
-            i.putExtra("id", id)
-            i.putExtra("icon", icon)
-            i.putExtra("ext", ext)
+            i.putExtra("startIndex", 0)
             i.putExtra("resumable", resumable)
+            ctx.startActivity(i)
+        }
+
+        fun startPlaylist(
+            ctx: Context,
+            urls: ArrayList<String>,
+            titles: ArrayList<String>,
+            ids: ArrayList<String>,
+            icons: ArrayList<String>,
+            exts: ArrayList<String>,
+            startIndex: Int
+        ) {
+            val i = Intent(ctx, PlayerActivity::class.java)
+            i.putStringArrayListExtra("urls", urls)
+            i.putStringArrayListExtra("titles", titles)
+            i.putStringArrayListExtra("ids", ids)
+            i.putStringArrayListExtra("icons", icons)
+            i.putStringArrayListExtra("exts", exts)
+            i.putExtra("section", "EPISODE")
+            i.putExtra("startIndex", startIndex)
+            i.putExtra("resumable", true)
             ctx.startActivity(i)
         }
     }
@@ -76,12 +92,13 @@ class PlayerActivity : ComponentActivity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         setContent {
             PlayerScreen(
-                url = intent.getStringExtra("url").orEmpty(),
-                title = intent.getStringExtra("title").orEmpty(),
+                urls = intent.getStringArrayListExtra("urls") ?: arrayListOf(),
+                titles = intent.getStringArrayListExtra("titles") ?: arrayListOf(),
+                ids = intent.getStringArrayListExtra("ids") ?: arrayListOf(),
+                icons = intent.getStringArrayListExtra("icons") ?: arrayListOf(),
+                exts = intent.getStringArrayListExtra("exts") ?: arrayListOf(),
                 section = intent.getStringExtra("section").orEmpty(),
-                id = intent.getStringExtra("id").orEmpty(),
-                icon = intent.getStringExtra("icon").orEmpty(),
-                ext = intent.getStringExtra("ext").orEmpty(),
+                startIndex = intent.getIntExtra("startIndex", 0),
                 resumable = intent.getBooleanExtra("resumable", false)
             ) { finish() }
         }
@@ -91,19 +108,21 @@ class PlayerActivity : ComponentActivity() {
 @OptIn(UnstableApi::class)
 @Composable
 fun PlayerScreen(
-    url: String,
-    title: String,
+    urls: List<String>,
+    titles: List<String>,
+    ids: List<String>,
+    icons: List<String>,
+    exts: List<String>,
     section: String,
-    id: String,
-    icon: String,
-    ext: String,
+    startIndex: Int,
     resumable: Boolean,
     onBack: () -> Unit
 ) {
     val ctx = LocalContext.current
     var error by remember { mutableStateOf("") }
     var resizeIndex by remember { mutableIntStateOf(0) }
-    var resumed by remember { mutableStateOf(false) }
+    var current by remember { mutableIntStateOf(startIndex) }
+    var notice by remember { mutableStateOf("") }
 
     val resizeModes = listOf(
         AspectRatioFrameLayout.RESIZE_MODE_FIT to "Sığdır",
@@ -111,8 +130,13 @@ fun PlayerScreen(
         AspectRatioFrameLayout.RESIZE_MODE_FILL to "Ger"
     )
 
+    fun idAt(i: Int) = ids.getOrNull(i).orEmpty()
+    fun titleAt(i: Int) = titles.getOrNull(i).orEmpty()
+    fun iconAt(i: Int) = icons.getOrNull(i).orEmpty()
+    fun extAt(i: Int) = exts.getOrNull(i).orEmpty()
+
     val startAt = remember {
-        if (resumable) Store.resumePosition(ctx, section, id) else 0L
+        if (resumable) Store.resumePosition(ctx, section, idAt(startIndex)) else 0L
     }
 
     val player = remember {
@@ -124,29 +148,32 @@ fun PlayerScreen(
         ExoPlayer.Builder(ctx)
             .setMediaSourceFactory(DefaultMediaSourceFactory(http))
             .build().apply {
-                setMediaItem(MediaItem.fromUri(url))
+                setMediaItems(urls.map { MediaItem.fromUri(it) })
                 playWhenReady = true
+                seekTo(startIndex, if (startAt > 0) startAt else 0L)
                 prepare()
-                if (startAt > 0) seekTo(startAt)
             }
     }
 
     LaunchedEffect(Unit) {
-        Store.record(ctx, section, id, title, icon, ext, startAt, 0L)
-        if (startAt > 0) resumed = true
+        if (startAt > 0) notice = "Kaldığın yerden devam ediliyor"
         while (true) {
             delay(5000)
+            val i = player.currentMediaItemIndex
             val d = player.duration
             if (resumable && d > 0) {
-                Store.record(ctx, section, id, title, icon, ext, player.currentPosition, d)
+                Store.record(
+                    ctx, section, idAt(i), titleAt(i), iconAt(i), extAt(i),
+                    player.currentPosition, d
+                )
             }
         }
     }
 
-    LaunchedEffect(resumed) {
-        if (resumed) {
+    LaunchedEffect(notice) {
+        if (notice.isNotEmpty()) {
             delay(3000)
-            resumed = false
+            notice = ""
         }
     }
 
@@ -155,12 +182,25 @@ fun PlayerScreen(
             override fun onPlayerError(e: PlaybackException) {
                 error = "Oynatılamadı (${e.errorCodeName})"
             }
+
+            override fun onMediaItemTransition(item: MediaItem?, reason: Int) {
+                val i = player.currentMediaItemIndex
+                current = i
+                error = ""
+                if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO && urls.size > 1) {
+                    notice = "Sonraki bölüm: ${titleAt(i)}"
+                }
+            }
         }
         player.addListener(listener)
         onDispose {
+            val i = player.currentMediaItemIndex
             val d = player.duration
             if (resumable && d > 0) {
-                Store.record(ctx, section, id, title, icon, ext, player.currentPosition, d)
+                Store.record(
+                    ctx, section, idAt(i), titleAt(i), iconAt(i), extAt(i),
+                    player.currentPosition, d
+                )
             }
             player.removeListener(listener)
             player.release()
@@ -181,8 +221,8 @@ fun PlayerScreen(
                     this.player = player
                     useController = true
                     setShowSubtitleButton(true)
-                    setShowNextButton(false)
-                    setShowPreviousButton(false)
+                    setShowNextButton(urls.size > 1)
+                    setShowPreviousButton(urls.size > 1)
                     controllerShowTimeoutMs = 3500
                     keepScreenOn = true
                 }
@@ -207,7 +247,7 @@ fun PlayerScreen(
                     .padding(horizontal = 10.dp)
             )
             Text(
-                title,
+                titleAt(current),
                 color = Color.White,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Medium,
@@ -227,9 +267,9 @@ fun PlayerScreen(
             )
         }
 
-        if (resumed) {
+        if (notice.isNotEmpty()) {
             Text(
-                "Kaldığın yerden devam ediliyor",
+                notice,
                 color = Color.White,
                 fontSize = 12.sp,
                 modifier = Modifier
