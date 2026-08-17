@@ -225,6 +225,9 @@ fun PlayerScreen(
                     setShowPreviousButton(urls.size > 1)
                     controllerShowTimeoutMs = 3500
                     keepScreenOn = true
+                    isFocusable = true
+                    isFocusableInTouchMode = false
+                    requestFocus()
                 }
             },
             update = { it.resizeMode = resizeModes[resizeIndex].first }
