@@ -228,6 +228,9 @@ fun PlayerScreen(
             .build().apply {
                 setMediaItems(urls.map { MediaItem.fromUri(it) })
                 playWhenReady = true
+                if (!Prefs.autoNext(ctx)) {
+                    repeatMode = Player.REPEAT_MODE_ONE
+                }
                 seekTo(startIndex, if (startAt > 0) startAt else 0L)
                 prepare()
             }
