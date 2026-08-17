@@ -11,9 +11,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.launch
 
 val PrizmaBg = Color(0xFF101014)
 val PrizmaSurface = Color(0xFF1A1A21)
@@ -45,11 +47,16 @@ fun PrizmaApp() {
         )
     ) {
         val ctx = LocalContext.current
+        val scope = rememberCoroutineScope()
+
         var host by remember { mutableStateOf("") }
         var user by remember { mutableStateOf("") }
         var pass by remember { mutableStateOf("") }
         var account by remember { mutableStateOf<Account?>(null) }
         var autoTried by remember { mutableStateOf(false) }
+        var showSettings by remember { mutableStateOf(false) }
+        var forceLogin by remember { mutableStateOf(false) }
+        var cacheEpoch by remember { mutableIntStateOf(0) }
 
         LaunchedEffect(Unit) {
             val saved = Prefs.load(ctx)
@@ -65,21 +72,54 @@ fun PrizmaApp() {
         }
 
         val acc = account
-        if (acc == null) {
-            LoginScreen(
-                initialHost = host,
-                initialUser = user,
-                initialPass = pass,
+
+        when {
+            acc == null || forceLogin -> LoginScreen(
+                initialHost = if (forceLogin) "" else host,
+                initialUser = if (forceLogin) "" else user,
+                initialPass = if (forceLogin) "" else pass,
                 ready = autoTried
             ) { h, u, p, a ->
                 host = h; user = u; pass = p; account = a
                 Prefs.save(ctx, h, u, p)
+                forceLogin = false
+                showSettings = false
+                cacheEpoch++
             }
-        } else {
-            HomeScreen(host, user, pass, acc) {
-                Prefs.clear(ctx)
-                account = null
-            }
+
+            showSettings -> SettingsScreen(
+                account = acc,
+                onBack = { showSettings = false },
+                onSwitchProfile = { prof ->
+                    Prefs.setActive(ctx, prof)
+                    scope.launch {
+                        try {
+                            val a = XtreamApi.login(prof.host, prof.user, prof.pass)
+                            host = prof.host; user = prof.user; pass = prof.pass
+                            account = a
+                            cacheEpoch++
+                            showSettings = false
+                        } catch (e: Exception) {
+                            forceLogin = true
+                        }
+                    }
+                },
+                onAddProfile = { forceLogin = true },
+                onClearCache = { cacheEpoch++ }
+            )
+
+            else -> HomeScreen(
+                host = host,
+                user = user,
+                pass = pass,
+                account = acc,
+                cacheEpoch = cacheEpoch,
+                onSettings = { showSettings = true },
+                onLogout = {
+                    Prefs.clear(ctx)
+                    account = null
+                }
+            )
         }
     }
 }
