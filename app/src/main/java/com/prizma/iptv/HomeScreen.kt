@@ -75,6 +75,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import coil.size.Scale
 
 private val BarStart = Color(0xFF23306E)
 private val BarEnd = Color(0xFF5B3FA8)
@@ -722,7 +724,11 @@ private fun ShelfTile(t: Tile, onClick: () -> Unit) {
         ) {
             if (t.icon.isNotEmpty()) {
                 AsyncImage(
-                    model = t.icon,
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(t.icon)
+                        .size(if (live) 340 else 230)
+                        .crossfade(false)
+                        .build(),
                     contentDescription = null,
                     contentScale = if (live) ContentScale.Fit else ContentScale.Crop,
                     modifier = Modifier
@@ -866,26 +872,9 @@ private fun PosterTile(
     onLeft: () -> Unit,
     onRight: () -> Unit
 ) {
+    val ctx = LocalContext.current
     val live = t.sectionName == Section.LIVE.name
     var showEpg by remember { mutableStateOf(false) }
-    var nowPlaying by remember { mutableStateOf("") }
-    var nowProgress by remember { mutableFloatStateOf(0f) }
-
-    if (live) {
-        LaunchedEffect(t.id) {
-            try {
-                val list = XtreamApi.shortEpg(Creds.host, Creds.user, Creds.pass, t.id, 2)
-                val sec = System.currentTimeMillis() / 1000
-                val cur = list.firstOrNull { sec in it.start..it.stop }
-                if (cur != null) {
-                    nowPlaying = cur.title
-                    nowProgress = epgProgress(sec, cur.start, cur.stop)
-                }
-            } catch (e: Exception) {
-                // akış yoksa sessizce boş kalır
-            }
-        }
-    }
 
     if (showEpg) {
         EpgDialog(t.id, t.name) { showEpg = false }
@@ -903,7 +892,12 @@ private fun PosterTile(
         ) {
             if (t.icon.isNotEmpty()) {
                 AsyncImage(
-                    model = t.icon,
+                    model = ImageRequest.Builder(ctx)
+                        .data(t.icon)
+                        .size(if (live) 320 else 240)
+                        .scale(Scale.FILL)
+                        .crossfade(false)
+                        .build(),
                     contentDescription = null,
                     contentScale = if (live) ContentScale.Fit else ContentScale.Crop,
                     modifier = Modifier
@@ -1019,15 +1013,5 @@ private fun PosterTile(
             overflow = TextOverflow.Ellipsis,
             lineHeight = 14.sp
         )
-
-        if (live && nowPlaying.isNotEmpty()) {
-            Text(
-                nowPlaying,
-                color = PrizmaAccent,
-                fontSize = 9.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
     }
 }
