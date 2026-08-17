@@ -3,11 +3,15 @@ package com.prizma.iptv
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.view.KeyEvent
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.annotation.OptIn
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -41,6 +45,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
@@ -75,6 +80,10 @@ private data class TrackOption(
     val selected: Boolean
 )
 
+object PlayerBus {
+    var onKey: ((Int) -> Boolean)? = null
+}
+
 class PlayerActivity : ComponentActivity() {
 
     companion object {
@@ -101,7 +110,9 @@ class PlayerActivity : ComponentActivity() {
             ids: ArrayList<String>,
             icons: ArrayList<String>,
             exts: ArrayList<String>,
-            startIndex: Int
+            startIndex: Int,
+            section: String = "EPISODE",
+            resumable: Boolean = true
         ) {
             val i = Intent(ctx, PlayerActivity::class.java)
             i.putStringArrayListExtra("urls", urls)
@@ -109,9 +120,9 @@ class PlayerActivity : ComponentActivity() {
             i.putStringArrayListExtra("ids", ids)
             i.putStringArrayListExtra("icons", icons)
             i.putStringArrayListExtra("exts", exts)
-            i.putExtra("section", "EPISODE")
+            i.putExtra("section", section)
             i.putExtra("startIndex", startIndex)
-            i.putExtra("resumable", true)
+            i.putExtra("resumable", resumable)
             ctx.startActivity(i)
         }
     }
@@ -133,6 +144,19 @@ class PlayerActivity : ComponentActivity() {
                 ) { finish() }
             }
         }
+    }
+
+    override fun onDestroy() {
+        PlayerBus.onKey = null
+        super.onDestroy()
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.action == KeyEvent.ACTION_DOWN) {
+            val handled = PlayerBus.onKey?.invoke(event.keyCode) ?: false
+            if (handled) return true
+        }
+        return super.dispatchKeyEvent(event)
     }
 }
 
@@ -187,7 +211,9 @@ fun PlayerScreen(
     var subSize by remember { mutableFloatStateOf(0.06f) }
     var tracks by remember { mutableStateOf<Tracks?>(null) }
     var viewRef by remember { mutableStateOf<PlayerView?>(null) }
+    var barVisible by remember { mutableStateOf(true) }
 
+    val live = section == Section.LIVE.name
     val hasList = urls.size > 1
     val resizeModes = listOf(
         AspectRatioFrameLayout.RESIZE_MODE_FIT to "Sığdır",
@@ -222,12 +248,48 @@ fun PlayerScreen(
             .build().apply {
                 setMediaItems(urls.map { MediaItem.fromUri(it) })
                 playWhenReady = true
-                if (!Prefs.autoNext(ctx)) {
+                if (!Prefs.autoNext(ctx) && !live) {
                     repeatMode = Player.REPEAT_MODE_ONE
                 }
                 seekTo(startIndex, if (startAt > 0) startAt else 0L)
                 prepare()
             }
+    }
+
+    fun jump(delta: Int) {
+        if (!hasList) return
+        val n = urls.size
+        val target = ((player.currentMediaItemIndex + delta) % n + n) % n
+        player.seekTo(target, 0L)
+        player.playWhenReady = true
+    }
+
+    DisposableEffect(locked, showMenu, hasList) {
+        PlayerBus.onKey = handler@{ code ->
+            if (showMenu) return@handler false
+            if (locked) {
+                return@handler code != KeyEvent.KEYCODE_BACK
+            }
+            when (code) {
+                KeyEvent.KEYCODE_CHANNEL_UP, KeyEvent.KEYCODE_PAGE_UP -> {
+                    jump(-1); true
+                }
+                KeyEvent.KEYCODE_CHANNEL_DOWN, KeyEvent.KEYCODE_PAGE_DOWN -> {
+                    jump(1); true
+                }
+                KeyEvent.KEYCODE_DPAD_UP -> {
+                    if (live && hasList) { jump(-1); true } else false
+                }
+                KeyEvent.KEYCODE_DPAD_DOWN -> {
+                    if (live && hasList) { jump(1); true } else false
+                }
+                KeyEvent.KEYCODE_MENU, KeyEvent.KEYCODE_INFO -> {
+                    showMenu = true; true
+                }
+                else -> false
+            }
+        }
+        onDispose { PlayerBus.onKey = null }
     }
 
     LaunchedEffect(Unit) {
@@ -247,7 +309,7 @@ fun PlayerScreen(
 
     LaunchedEffect(notice) {
         if (notice.isNotEmpty()) {
-            delay(2200)
+            delay(2500)
             notice = ""
         }
     }
@@ -271,8 +333,8 @@ fun PlayerScreen(
                 val i = player.currentMediaItemIndex
                 current = i
                 error = ""
-                if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO && hasList) {
-                    notice = "Sonraki: ${titleAt(i)}"
+                if (reason != Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT && hasList) {
+                    notice = titleAt(i)
                 }
             }
         }
@@ -328,6 +390,11 @@ fun PlayerScreen(
                             null
                         )
                     )
+                    setControllerVisibilityListener(
+                        PlayerView.ControllerVisibilityListener { vis ->
+                            barVisible = vis == android.view.View.VISIBLE
+                        }
+                    )
                     viewRef = this
                 }
             },
@@ -339,13 +406,6 @@ fun PlayerScreen(
         )
 
         if (locked) {
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .clickable(indication = null, interactionSource = remember {
-                        androidx.compose.foundation.interaction.MutableInteractionSource()
-                    }) { }
-            )
             Box(
                 Modifier
                     .align(Alignment.TopEnd)
@@ -362,40 +422,51 @@ fun PlayerScreen(
                 Text("🔓", fontSize = 16.sp)
             }
         } else {
-            Row(
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .fillMaxWidth()
-                    .padding(10.dp),
-                verticalAlignment = Alignment.CenterVertically
+            AnimatedVisibility(
+                visible = barVisible,
+                enter = fadeIn(),
+                exit = fadeOut(),
+                modifier = Modifier.align(Alignment.TopStart)
             ) {
-                RoundBtn("‹", 24.sp) { onBack() }
-                Spacer(Modifier.width(8.dp))
-                RoundBtn("🔒", 14.sp) {
-                    locked = true
-                    viewRef?.hideController()
-                    notice = "Kilitlendi · sağ üstten aç"
-                }
-                Text(
-                    titleAt(current),
-                    color = Color.White,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+                Row(
                     modifier = Modifier
-                        .weight(1f)
-                        .padding(horizontal = 10.dp)
-                )
-                if (speed != 1f) {
+                        .fillMaxWidth()
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(Color(0xB3000000), Color.Transparent)
+                            )
+                        )
+                        .padding(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    RoundBtn("‹", 24.sp) { onBack() }
+                    Spacer(Modifier.width(8.dp))
+                    RoundBtn("🔒", 14.sp) {
+                        locked = true
+                        viewRef?.hideController()
+                        notice = "Kilitlendi · sağ üstten aç"
+                    }
                     Text(
-                        "${speed}x",
-                        color = PrizmaAccent,
-                        fontSize = 12.sp,
-                        modifier = Modifier.padding(end = 8.dp)
+                        titleAt(current),
+                        color = Color.White,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(horizontal = 10.dp)
                     )
+                    if (speed != 1f) {
+                        Text(
+                            "${speed}x",
+                            color = PrizmaAccent,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(end = 8.dp)
+                        )
+                    }
+                    RoundBtn("⋮", 18.sp) { showMenu = true }
                 }
-                RoundBtn("⋮", 18.sp) { showMenu = true }
             }
         }
 
@@ -403,13 +474,14 @@ fun PlayerScreen(
             Text(
                 notice,
                 color = Color.White,
-                fontSize = 12.sp,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .padding(bottom = 90.dp)
                     .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xAA000000))
-                    .padding(horizontal = 14.dp, vertical = 8.dp)
+                    .background(Color(0xB3000000))
+                    .padding(horizontal = 16.dp, vertical = 9.dp)
             )
         }
 
@@ -430,8 +502,9 @@ fun PlayerScreen(
                 subSize = subSize,
                 resizeLabel = resizeModes[resizeIndex].second,
                 hasList = hasList,
+                live = live,
                 onSpeed = { speed = it },
-                onSubSize = { subSize = it },
+                onSubSize = { onSub -> subSize = onSub },
                 onResize = { resizeIndex = (resizeIndex + 1) % resizeModes.size },
                 onDismiss = { showMenu = false }
             )
@@ -462,6 +535,7 @@ private fun SettingsPanel(
     subSize: Float,
     resizeLabel: String,
     hasList: Boolean,
+    live: Boolean,
     onSpeed: (Float) -> Unit,
     onSubSize: (Float) -> Unit,
     onResize: () -> Unit,
@@ -540,11 +614,13 @@ private fun SettingsPanel(
                 }
             }
 
-            Spacer(Modifier.height(14.dp))
-            GroupTitle("Oynatma hızı")
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f).forEach { v ->
-                    Pill(if (v == 1f) "Normal" else "${v}x", speed == v) { onSpeed(v) }
+            if (!live) {
+                Spacer(Modifier.height(14.dp))
+                GroupTitle("Oynatma hızı")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f).forEach { v ->
+                        Pill(if (v == 1f) "Normal" else "${v}x", speed == v) { onSpeed(v) }
+                    }
                 }
             }
 
@@ -554,10 +630,19 @@ private fun SettingsPanel(
 
             if (hasList) {
                 Spacer(Modifier.height(14.dp))
-                GroupTitle("Bölüm")
+                GroupTitle(if (live) "Kanal" else "Bölüm")
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Pill("◀ Önceki", false) { player.seekToPreviousMediaItem() }
                     Pill("Sonraki ▶", false) { player.seekToNextMediaItem() }
+                }
+                if (live) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "Kumandada yukarı/aşağı ok ile de kanal değiştirebilirsin.",
+                        color = Color(0xFF6E7686),
+                        fontSize = 10.sp,
+                        lineHeight = 14.sp
+                    )
                 }
             }
 
