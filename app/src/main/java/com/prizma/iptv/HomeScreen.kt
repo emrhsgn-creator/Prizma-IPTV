@@ -112,9 +112,15 @@ private fun WatchState.toTile(): Tile {
 }
 
 private fun launchTile(ctx: Context, host: String, user: String, pass: String, t: Tile) {
-    if (t.sectionName == Section.SERIES.name) {
-        SeriesActivity.start(ctx, host, user, pass, t.id, t.name, t.icon)
-        return
+    when (t.sectionName) {
+        Section.SERIES.name -> {
+            SeriesActivity.start(ctx, host, user, pass, t.id, t.name, t.icon)
+            return
+        }
+        Section.VOD.name -> {
+            MovieActivity.start(ctx, host, user, pass, t.id, t.name, t.icon, t.ext, t.rating)
+            return
+        }
     }
     val live = t.sectionName == Section.LIVE.name
     val e = if (t.ext.isNotEmpty()) t.ext else if (live) "ts" else "mp4"
