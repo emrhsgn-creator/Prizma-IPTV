@@ -74,6 +74,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import androidx.compose.material.icons.filled.Settings
 
 private val BarStart = Color(0xFF23306E)
 private val BarEnd = Color(0xFF5B3FA8)
@@ -157,6 +158,8 @@ fun HomeScreen(
     user: String,
     pass: String,
     account: Account,
+    cacheEpoch: Int,
+    onSettings: () -> Unit,
     onLogout: () -> Unit
 ) {
     val ctx = LocalContext.current
@@ -193,7 +196,9 @@ fun HomeScreen(
     val favs = remember(localRev, Refresh.tick) { Store.favorites(ctx) }
     val hist = remember(localRev, Refresh.tick) { Store.history(ctx) }
 
-    LaunchedEffect(reload) { if (reload > 0) cache.clear() }
+    LaunchedEffect(reload, cacheEpoch) {
+        if (reload > 0 || cacheEpoch > 0) cache.clear()
+    }
 
     LaunchedEffect(section, reload) {
         val sec = section ?: return@LaunchedEffect
@@ -314,6 +319,9 @@ fun HomeScreen(
                     }
                     IconButton(onClick = { reload++ }) {
                         Icon(Icons.Default.Refresh, null, tint = Color.White)
+                    }
+                    IconButton(onClick = onSettings) {
+                        Icon(Icons.Default.Settings, null, tint = Color.White)
                     }
                     IconButton(onClick = onLogout) {
                         Icon(Icons.Default.ExitToApp, null, tint = Color.White)
