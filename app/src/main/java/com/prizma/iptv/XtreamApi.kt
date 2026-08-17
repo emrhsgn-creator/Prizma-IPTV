@@ -57,6 +57,20 @@ data class EpgItem(
     val start: Long,
     val stop: Long
 )
+data class VodInfo(
+    val plot: String,
+    val cover: String,
+    val backdrop: String,
+    val genre: String,
+    val releaseDate: String,
+    val cast: String,
+    val director: String,
+    val duration: String,
+    val country: String,
+    val rating: String,
+    val youtube: String,
+    val extension: String
+)
 enum class Section(
     val title: String,
     val categoryAction: String,
@@ -259,5 +273,30 @@ suspend fun shortEpg(
         } catch (e: Exception) {
             s
         }
+    }
+    suspend fun vodInfo(
+        host: String, user: String, pass: String, vodId: String
+    ): VodInfo {
+        val body = request(host, user, pass, "&action=get_vod_info&vod_id=" + enc(vodId))
+        val root = try { JSONObject(body) } catch (e: Exception) {
+            throw Exception("Film bilgisi alınamadı.")
+        }
+        val info = root.optJSONObject("info") ?: JSONObject()
+        val movie = root.optJSONObject("movie_data") ?: JSONObject()
+
+        return VodInfo(
+            plot = info.optString("plot", info.optString("description", "")),
+            cover = info.optString("movie_image", info.optString("cover_big", "")),
+            backdrop = info.optJSONArray("backdrop_path")?.optString(0, "").orEmpty(),
+            genre = info.optString("genre", ""),
+            releaseDate = info.optString("releasedate", info.optString("release_date", "")),
+            cast = info.optString("cast", info.optString("actors", "")),
+            director = info.optString("director", ""),
+            duration = info.optString("duration", ""),
+            country = info.optString("country", ""),
+            rating = parseRating(info),
+            youtube = info.optString("youtube_trailer", ""),
+            extension = movie.optString("container_extension", "mp4")
+        )
     }
 }
