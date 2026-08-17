@@ -31,7 +31,26 @@ data class StreamItem(
     val rating: String,
     val added: Long
 )
+data class Episode(
+    val id: String,
+    val title: String,
+    val season: Int,
+    val episodeNum: Int,
+    val extension: String,
+    val plot: String,
+    val duration: String,
+    val icon: String
+)
 
+data class SeriesInfo(
+    val plot: String,
+    val cover: String,
+    val genre: String,
+    val releaseDate: String,
+    val cast: String,
+    val rating: String,
+    val seasons: Map<Int, List<Episode>>
+)
 enum class Section(
     val title: String,
     val categoryAction: String,
@@ -154,5 +173,53 @@ object XtreamApi {
         val a = o.opt("added")?.toString()?.toLongOrNull()
         if (a != null) return a
         return o.opt("last_modified")?.toString()?.toLongOrNull() ?: 0L
+    }
+    suspend fun seriesInfo(
+        host: String, user: String, pass: String, seriesId: String
+    ): SeriesInfo {
+        val body = request(host, user, pass, "&action=get_series_info&series_id=" + enc(seriesId))
+        val root = try { JSONObject(body) } catch (e: Exception) {
+            throw Exception("Dizi bilgisi alınamadı.")
+        }
+        val info = root.optJSONObject("info") ?: JSONObject()
+        val epsObj = root.optJSONObject("episodes") ?: JSONObject()
+
+        val seasons = LinkedHashMap<Int, List<Episode>>()
+        val keys = epsObj.keys().asSequence().toList()
+            .sortedBy { it.toIntOrNull() ?: Int.MAX_VALUE }
+
+        for (k in keys) {
+            val arr = epsObj.optJSONArray(k) ?: continue
+            val list = ArrayList<Episode>(arr.length())
+            for (i in 0 until arr.length()) {
+                val o = arr.optJSONObject(i) ?: continue
+                val ei = o.optJSONObject("info") ?: JSONObject()
+                list.add(
+                    Episode(
+                        id = o.opt("id")?.toString().orEmpty(),
+                        title = o.optString("title", "Bölüm"),
+                        season = k.toIntOrNull() ?: 0,
+                        episodeNum = o.opt("episode_num")?.toString()?.toIntOrNull() ?: (i + 1),
+                        extension = o.optString("container_extension", "mp4"),
+                        plot = ei.optString("plot", ""),
+                        duration = ei.optString("duration", ""),
+                        icon = ei.optString("movie_image", "")
+                    )
+                )
+            }
+            if (list.isNotEmpty()) {
+                seasons[k.toIntOrNull() ?: 0] = list.sortedBy { it.episodeNum }
+            }
+        }
+
+        return SeriesInfo(
+            plot = info.optString("plot", ""),
+            cover = info.optString("cover", ""),
+            genre = info.optString("genre", ""),
+            releaseDate = info.optString("releaseDate", info.optString("release_date", "")),
+            cast = info.optString("cast", ""),
+            rating = parseRating(info),
+            seasons = seasons
+        )
     }
 }
