@@ -46,6 +46,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import androidx.compose.foundation.border
+import androidx.compose.ui.focus.onFocusChanged
 
 class SeriesActivity : ComponentActivity() {
 
@@ -254,6 +256,7 @@ fun SeriesScreen(
 @Composable
 private fun EpisodeRow(ep: Episode, onClick: () -> Unit) {
     val ctx = LocalContext.current
+    var focused by remember { mutableStateOf(false) }
     val progress = remember(ep.id) {
         val w = Store.history(ctx).firstOrNull { it.section == "EPISODE" && it.id == ep.id }
         if (w != null && w.duration > 0) {
@@ -261,11 +264,18 @@ private fun EpisodeRow(ep: Episode, onClick: () -> Unit) {
         } else 0f
     }
 
-    Row(
+   Row(
         Modifier
             .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 2.dp)
+            .border(
+                width = if (focused) 2.dp else 0.dp,
+                color = if (focused) Color.White else Color.Transparent,
+                shape = RoundedCornerShape(8.dp)
+            )
+            .onFocusChanged { focused = it.isFocused }
             .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 8.dp),
+            .padding(horizontal = 6.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
