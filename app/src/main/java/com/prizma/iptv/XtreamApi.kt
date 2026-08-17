@@ -51,6 +51,12 @@ data class SeriesInfo(
     val rating: String,
     val seasons: Map<Int, List<Episode>>
 )
+data class EpgItem(
+    val title: String,
+    val description: String,
+    val start: Long,
+    val stop: Long
+)
 enum class Section(
     val title: String,
     val categoryAction: String,
@@ -221,5 +227,37 @@ object XtreamApi {
             rating = parseRating(info),
             seasons = seasons
         )
+    }
+suspend fun shortEpg(
+        host: String, user: String, pass: String, streamId: String, limit: Int = 8
+    ): List<EpgItem> {
+        val body = request(
+            host, user, pass,
+            "&action=get_short_epg&stream_id=" + enc(streamId) + "&limit=" + limit
+        )
+        val root = try { JSONObject(body) } catch (e: Exception) { return emptyList() }
+        val arr = root.optJSONArray("epg_listings") ?: return emptyList()
+        val out = ArrayList<EpgItem>(arr.length())
+        for (i in 0 until arr.length()) {
+            val o = arr.optJSONObject(i) ?: continue
+            out.add(
+                EpgItem(
+                    title = decodeB64(o.optString("title", "")),
+                    description = decodeB64(o.optString("description", "")),
+                    start = o.opt("start_timestamp")?.toString()?.toLongOrNull() ?: 0L,
+                    stop = o.opt("stop_timestamp")?.toString()?.toLongOrNull() ?: 0L
+                )
+            )
+        }
+        return out.sortedBy { it.start }
+    }
+
+    private fun decodeB64(s: String): String {
+        if (s.isBlank()) return ""
+        return try {
+            String(android.util.Base64.decode(s, android.util.Base64.DEFAULT), Charsets.UTF_8)
+        } catch (e: Exception) {
+            s
+        }
     }
 }
