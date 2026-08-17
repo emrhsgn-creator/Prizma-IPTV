@@ -213,7 +213,17 @@ fun PlayerScreen(
             .setAllowCrossProtocolRedirects(true)
             .setConnectTimeoutMs(15000)
             .setReadTimeoutMs(20000)
+        val sec = Prefs.bufferSeconds(ctx)
+        val loadControl = androidx.media3.exoplayer.DefaultLoadControl.Builder()
+            .setBufferDurationsMs(
+                sec * 1000,
+                sec * 2000,
+                1500,
+                3000
+            )
+            .build()
         ExoPlayer.Builder(ctx)
+            .setLoadControl(loadControl)
             .setMediaSourceFactory(DefaultMediaSourceFactory(http))
             .build().apply {
                 setMediaItems(urls.map { MediaItem.fromUri(it) })
