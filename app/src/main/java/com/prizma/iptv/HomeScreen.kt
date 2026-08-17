@@ -31,6 +31,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -50,6 +51,7 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -72,7 +74,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
-import androidx.compose.foundation.lazy.itemsIndexed
 
 private val BarStart = Color(0xFF23306E)
 private val BarEnd = Color(0xFF5B3FA8)
@@ -170,7 +171,9 @@ fun HomeScreen(
     var sortMode by remember { mutableStateOf(SortMode.MANUAL) }
 
     LaunchedEffect(Unit) {
-        Creds.host = host; Creds.user = user; Creds.pass = pass
+        Creds.host = host
+        Creds.user = user
+        Creds.pass = pass
         if (isTv) runCatching { firstTab.requestFocus() }
     }
 
@@ -190,7 +193,8 @@ fun HomeScreen(
         val sec = section ?: return@LaunchedEffect
         selectedCat = ""
         if (cache.containsKey(sec)) return@LaunchedEffect
-        loading = true; error = ""
+        loading = true
+        error = ""
         try {
             val cats = XtreamApi.categories(host, user, pass, sec)
             val items = XtreamApi.allStreams(host, user, pass, sec)
@@ -219,7 +223,10 @@ fun HomeScreen(
 
     BackHandler(enabled = tab != 0 || selectedCat.isNotEmpty() || query.isNotEmpty()) {
         when {
-            query.isNotEmpty() || searching -> { query = ""; searching = false }
+            query.isNotEmpty() || searching -> {
+                query = ""
+                searching = false
+            }
             selectedCat.isNotEmpty() -> selectedCat = ""
             else -> tab = 0
         }
@@ -260,7 +267,9 @@ fun HomeScreen(
                             focusedIndicatorColor = Color.Transparent,
                             unfocusedIndicatorColor = Color.Transparent
                         ),
-                        modifier = Modifier.weight(1f).height(48.dp)
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp)
                     )
                     IconButton(onClick = { searching = false; query = "" }) {
                         Icon(Icons.Default.Close, null, tint = Color.White)
@@ -270,7 +279,9 @@ fun HomeScreen(
                         modifier = Modifier.weight(1f),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        val labels = listOf("Ana Sayfa", "Canlı TV", "Filmler", "Diziler", "Son İzlenenler")
+                        val labels = listOf(
+                            "Ana Sayfa", "Canlı TV", "Filmler", "Diziler", "Son İzlenenler"
+                        )
                         itemsIndexed(labels) { i, label ->
                             val sel = i == tab
                             Text(
@@ -312,8 +323,14 @@ fun HomeScreen(
             if (tab == 4) {
                 HistoryTab(
                     ctx, host, user, pass, hist,
-                    onRemove = { t -> Store.removeHistory(ctx, t.sectionName, t.id); localRev++ },
-                    onClear = { Store.clearHistory(ctx); localRev++ }
+                    onRemove = { t ->
+                        Store.removeHistory(ctx, t.sectionName, t.id)
+                        localRev++
+                    },
+                    onClear = {
+                        Store.clearHistory(ctx)
+                        localRev++
+                    }
                 )
                 return@Column
             }
@@ -386,7 +403,10 @@ fun HomeScreen(
                                     Toast.LENGTH_SHORT
                                 ).show()
                             },
-                            onMove = { t, d -> Store.moveFavorite(ctx, sec.name, t.id, d); localRev++ }
+                            onMove = { t, d ->
+                                Store.moveFavorite(ctx, sec.name, t.id, d)
+                                localRev++
+                            }
                         )
                     }
                 }
@@ -394,7 +414,10 @@ fun HomeScreen(
                 if (wide) {
                     Row(Modifier.fillMaxSize()) {
                         Column(
-                            Modifier.width(230.dp).fillMaxHeight().background(SideBg)
+                            Modifier
+                                .width(230.dp)
+                                .fillMaxHeight()
+                                .background(SideBg)
                         ) {
                             Text(
                                 "Kategoriler",
@@ -440,7 +463,9 @@ fun HomeScreen(
                                     selectedCat = FAV_CAT
                                 }
                             }
-                            item { Chip("TÜMÜ", selectedCat.isEmpty()) { selectedCat = "" } }
+                            item {
+                                Chip("TÜMÜ", selectedCat.isEmpty()) { selectedCat = "" }
+                            }
                             items(data.categories) { c ->
                                 Chip("${c.name} (${c.count})", selectedCat == c.id) {
                                     selectedCat = c.id
@@ -473,10 +498,17 @@ private fun HistoryTab(
     }
     Column(Modifier.fillMaxSize()) {
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("${hist.size} kayıt", color = Muted, fontSize = 12.sp, modifier = Modifier.weight(1f))
+            Text(
+                "${hist.size} kayıt",
+                color = Muted,
+                fontSize = 12.sp,
+                modifier = Modifier.weight(1f)
+            )
             Row(
                 Modifier
                     .tvFocus(RoundedCornerShape(16.dp), 1.0f)
@@ -486,7 +518,11 @@ private fun HistoryTab(
                     .padding(horizontal = 12.dp, vertical = 7.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.Default.Delete, null, tint = Color(0xFFFF6B6B), modifier = Modifier.size(14.dp))
+                Icon(
+                    Icons.Default.Delete, null,
+                    tint = Color(0xFFFF6B6B),
+                    modifier = Modifier.size(14.dp)
+                )
                 Spacer(Modifier.width(6.dp))
                 Text("Geçmişi temizle", color = Color(0xFFC3C8D4), fontSize = 12.sp)
             }
@@ -531,14 +567,18 @@ private fun HomeTab(
 
         if (devam.isNotEmpty()) item {
             Shelf("Devam Et") {
-                items(devam) { w -> ShelfTile(w.toTile()) { launchTile(ctx, host, user, pass, w.toTile()) } }
+                items(devam) { w ->
+                    val t = w.toTile()
+                    ShelfTile(t) { launchTile(ctx, host, user, pass, t) }
+                }
             }
         }
 
         if (favs.isNotEmpty()) item {
             Shelf("Favoriler") {
                 items(favs.reversed()) { f ->
-                    ShelfTile(f.toTile()) { launchTile(ctx, host, user, pass, f.toTile()) }
+                    val t = f.toTile()
+                    ShelfTile(t) { launchTile(ctx, host, user, pass, t) }
                 }
             }
         }
@@ -546,7 +586,8 @@ private fun HomeTab(
         if (hist.isNotEmpty()) item {
             Shelf("Son İzlenenler") {
                 items(hist.take(25)) { w ->
-                    ShelfTile(w.toTile()) { launchTile(ctx, host, user, pass, w.toTile()) }
+                    val t = w.toTile()
+                    ShelfTile(t) { launchTile(ctx, host, user, pass, t) }
                 }
             }
         }
@@ -589,9 +630,16 @@ private fun HomeTab(
             }
         }
 
-        if (devam.isEmpty() && favs.isEmpty() && hist.isEmpty() && vod.isEmpty() && series.isEmpty()) {
+        if (devam.isEmpty() && favs.isEmpty() && hist.isEmpty() &&
+            vod.isEmpty() && series.isEmpty()
+        ) {
             item {
-                Box(Modifier.fillMaxWidth().padding(60.dp), Alignment.Center) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(60.dp),
+                    Alignment.Center
+                ) {
                     CircularProgressIndicator(color = PrizmaAccent)
                 }
             }
@@ -635,7 +683,9 @@ private fun ShelfTile(t: Tile, onClick: () -> Unit) {
                     model = t.icon,
                     contentDescription = null,
                     contentScale = if (live) ContentScale.Fit else ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize().padding(if (live) 6.dp else 0.dp)
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(if (live) 6.dp else 0.dp)
                 )
             }
             if (t.rating.isNotEmpty()) RatingBadge(Modifier.align(Alignment.TopEnd), t.rating)
@@ -710,7 +760,11 @@ private fun RatingBadge(modifier: Modifier, rating: String) {
             .padding(horizontal = 5.dp, vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(Icons.Default.Star, null, tint = Color(0xFFF5C518), modifier = Modifier.size(10.dp))
+        Icon(
+            Icons.Default.Star, null,
+            tint = Color(0xFFF5C518),
+            modifier = Modifier.size(10.dp)
+        )
         Spacer(Modifier.width(3.dp))
         Text(rating, color = Color.White, fontSize = 10.sp)
     }
@@ -767,7 +821,7 @@ private fun PosterTile(
     val live = t.sectionName == Section.LIVE.name
     var showEpg by remember { mutableStateOf(false) }
     var nowPlaying by remember { mutableStateOf("") }
-    var nowProgress by remember { mutableStateOf(0f) }
+    var nowProgress by remember { mutableFloatStateOf(0f) }
 
     if (live) {
         LaunchedEffect(t.id) {
@@ -804,7 +858,9 @@ private fun PosterTile(
                     model = t.icon,
                     contentDescription = null,
                     contentScale = if (live) ContentScale.Fit else ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize().padding(if (live) 8.dp else 0.dp)
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(if (live) 8.dp else 0.dp)
                 )
             } else {
                 Text(
@@ -819,7 +875,10 @@ private fun PosterTile(
                 Icon(
                     Icons.Default.Star, null,
                     tint = Color(0xFFF5C518),
-                    modifier = Modifier.align(Alignment.TopStart).padding(5.dp).size(14.dp)
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(5.dp)
+                        .size(14.dp)
                 )
             }
             if (t.progress > 0f) {
@@ -850,7 +909,9 @@ private fun PosterTile(
 
         if (showMove) {
             Row(
-                Modifier.fillMaxWidth().padding(top = 3.dp),
+                Modifier
+                    .fillMaxWidth()
+                    .padding(top = 3.dp),
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
                 Text(
@@ -906,41 +967,5 @@ private fun PosterTile(
                 )
             }
         }
-    }
-}
-
-        if (showMove) {
-            Row(
-                Modifier.fillMaxWidth().padding(top = 3.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly
-            ) {
-                Text(
-                    "◀", color = PrizmaAccent, fontSize = 14.sp,
-                    modifier = Modifier
-                        .tvFocus(RoundedCornerShape(4.dp), 1.0f)
-                        .clip(RoundedCornerShape(4.dp))
-                        .clickable(onClick = onLeft)
-                        .padding(horizontal = 12.dp, vertical = 2.dp)
-                )
-                Text(
-                    "▶", color = PrizmaAccent, fontSize = 14.sp,
-                    modifier = Modifier
-                        .tvFocus(RoundedCornerShape(4.dp), 1.0f)
-                        .clip(RoundedCornerShape(4.dp))
-                        .clickable(onClick = onRight)
-                        .padding(horizontal = 12.dp, vertical = 2.dp)
-                )
-            }
-        }
-
-        Spacer(Modifier.height(6.dp))
-        Text(
-            t.name,
-            color = Color(0xFFE6E8EB),
-            fontSize = 11.sp,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            lineHeight = 14.sp
-        )
     }
 }
