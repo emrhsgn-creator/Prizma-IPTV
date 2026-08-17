@@ -85,12 +85,16 @@ private fun launchItem(
     sectionName: String, id: String, name: String, icon: String, ext: String
 ) {
     if (sectionName == Section.SERIES.name) {
-        Toast.makeText(ctx, "Dizi bölümleri sonraki adımda", Toast.LENGTH_SHORT).show()
+        SeriesActivity.start(ctx, host, user, pass, id, name, icon)
         return
     }
     val live = sectionName == Section.LIVE.name
-    val e = if (ext.isNotEmpty()) ext else "ts"
-    val folder = if (live) "live" else "movie"
+    val e = if (ext.isNotEmpty()) ext else if (live) "ts" else "mp4"
+    val folder = when {
+        live -> "live"
+        sectionName == "EPISODE" -> "series"
+        else -> "movie"
+    }
     PlayerActivity.start(
         ctx, "$host/$folder/$user/$pass/$id.$e", name,
         sectionName, id, icon, e, !live
