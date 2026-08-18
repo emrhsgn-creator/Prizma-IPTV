@@ -441,7 +441,7 @@ fun HomeScreen(
                             tiles = tiles,
                             favIds = favIds,
                             showMove = showingFav && sortMode == SortMode.MANUAL,
-                            showFavButton = sec == Section.LIVE,
+                            showFavButton = true,
                             onClick = { t ->
                                 if (t.sectionName == Section.LIVE.name) {
                                     playLiveList(ctx, host, user, pass, tiles, t)
