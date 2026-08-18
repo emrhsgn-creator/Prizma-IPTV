@@ -244,7 +244,12 @@ fun PlayerScreen(
             .setLoadControl(loadControl)
             .setSeekBackIncrementMs(10_000)
             .setSeekForwardIncrementMs(30_000)
-            .setMediaSourceFactory(DefaultMediaSourceFactory(http))
+            val extractors = androidx.media3.extractor.DefaultExtractorsFactory()
+            .setTsExtractorFlags(
+                androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
+                    .FLAG_DETECT_ACCESS_UNITS
+            )
+            .setTsExtractorTimestampSearchBytes(1500 * 188)
             .build().apply {
                 setMediaItems(urls.map { MediaItem.fromUri(it) })
                 playWhenReady = true
@@ -282,6 +287,10 @@ fun PlayerScreen(
                 }
                 KeyEvent.KEYCODE_DPAD_DOWN -> {
                     if (live && hasList) { jump(1); true } else false
+                }
+                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
+                    viewRef?.showController()
+                    false
                 }
                 KeyEvent.KEYCODE_MENU, KeyEvent.KEYCODE_INFO -> {
                     showMenu = true; true
