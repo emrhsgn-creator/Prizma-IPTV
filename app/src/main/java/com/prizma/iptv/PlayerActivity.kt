@@ -214,6 +214,7 @@ fun PlayerScreen(
     var tracks by remember { mutableStateOf<Tracks?>(null) }
     var viewRef by remember { mutableStateOf<PlayerView?>(null) }
     var barVisible by remember { mutableStateOf(true) }
+    var triedFallback by remember { mutableStateOf(false) }
 
     val live = section == Section.LIVE.name
     val hasList = urls.size > 1
@@ -356,6 +357,7 @@ fun PlayerScreen(
                 val i = player.currentMediaItemIndex
                 current = i
                 error = ""
+                triedFallback = false
                 if (reason != Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT && hasList) {
                     notice = titleAt(i)
                 }
