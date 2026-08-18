@@ -67,6 +67,8 @@ import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.extractor.DefaultExtractorsFactory
+import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.PlayerView
@@ -236,20 +238,21 @@ fun PlayerScreen(
             .setAllowCrossProtocolRedirects(true)
             .setConnectTimeoutMs(15000)
             .setReadTimeoutMs(20000)
+
+        val extractors = DefaultExtractorsFactory()
+            .setTsExtractorFlags(DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS)
+            .setTsExtractorTimestampSearchBytes(1500 * 188)
+
         val sec = Prefs.bufferSeconds(ctx)
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(sec * 1000, sec * 2000, 1500, 3000)
             .build()
+
         ExoPlayer.Builder(ctx)
             .setLoadControl(loadControl)
             .setSeekBackIncrementMs(10_000)
             .setSeekForwardIncrementMs(30_000)
-            val extractors = androidx.media3.extractor.DefaultExtractorsFactory()
-            .setTsExtractorFlags(
-                androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
-                    .FLAG_DETECT_ACCESS_UNITS
-            )
-            .setTsExtractorTimestampSearchBytes(1500 * 188)
+            .setMediaSourceFactory(DefaultMediaSourceFactory(http, extractors))
             .build().apply {
                 setMediaItems(urls.map { MediaItem.fromUri(it) })
                 playWhenReady = true
@@ -269,13 +272,17 @@ fun PlayerScreen(
         player.playWhenReady = true
     }
 
-    DisposableEffect(locked, showMenu, hasList) {
+    DisposableEffect(locked, showMenu, hasList, live) {
         PlayerBus.onKey = handler@{ code ->
             if (showMenu) return@handler false
             if (locked) {
                 return@handler code != KeyEvent.KEYCODE_BACK
             }
             when (code) {
+                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
+                    viewRef?.showController()
+                    false
+                }
                 KeyEvent.KEYCODE_CHANNEL_UP, KeyEvent.KEYCODE_PAGE_UP -> {
                     jump(-1); true
                 }
@@ -287,10 +294,6 @@ fun PlayerScreen(
                 }
                 KeyEvent.KEYCODE_DPAD_DOWN -> {
                     if (live && hasList) { jump(1); true } else false
-                }
-                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
-                    viewRef?.showController()
-                    false
                 }
                 KeyEvent.KEYCODE_MENU, KeyEvent.KEYCODE_INFO -> {
                     showMenu = true; true
@@ -384,10 +387,10 @@ fun PlayerScreen(
                     setShowSubtitleButton(true)
                     setShowNextButton(hasList)
                     setShowPreviousButton(hasList)
-                    controllerShowTimeoutMs = 4000
+                    controllerShowTimeoutMs = 5000
                     keepScreenOn = true
                     isFocusable = true
-                    isFocusableInTouchMode = false
+                    isFocusableInTouchMode = true
                     requestFocus()
                     subtitleView?.setStyle(
                         CaptionStyleCompat(
@@ -513,7 +516,7 @@ fun PlayerScreen(
                 hasList = hasList,
                 live = live,
                 onSpeed = { speed = it },
-                onSubSize = { onSub -> subSize = onSub },
+                onSubSize = { subSize = it },
                 onResize = { resizeIndex = (resizeIndex + 1) % resizeModes.size },
                 onDismiss = { showMenu = false }
             )
