@@ -333,7 +333,18 @@ fun PlayerScreen(
     DisposableEffect(Unit) {
         val listener = object : Player.Listener {
             override fun onPlayerError(e: PlaybackException) {
-                error = "Oynatılamadı (${e.errorCodeName})"
+                val i = player.currentMediaItemIndex
+                val url = urls.getOrNull(i).orEmpty()
+                if (live && url.endsWith(".ts") && !triedFallback) {
+                    triedFallback = true
+                    val alt = url.removeSuffix(".ts") + ".m3u8"
+                    player.setMediaItem(MediaItem.fromUri(alt))
+                    player.prepare()
+                    player.playWhenReady = true
+                    notice = "Alternatif format deneniyor"
+                } else {
+                    error = "Oynatılamadı (${e.errorCodeName})"
+                }
             }
 
             override fun onTracksChanged(t: Tracks) {
