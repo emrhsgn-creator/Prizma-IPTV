@@ -141,18 +141,22 @@ private fun playLiveList(
     all: List<Tile>, picked: Tile
 ) {
     val liveTiles = all.filter { it.sectionName == Section.LIVE.name }
-    val idx = liveTiles.indexOfFirst { it.id == picked.id }
+    val pos = liveTiles.indexOfFirst { it.id == picked.id }.coerceAtLeast(0)
+
+    val window = 40
+    val from = (pos - window).coerceAtLeast(0)
+    val to = (pos + window + 1).coerceAtMost(liveTiles.size)
+    val slice = liveTiles.subList(from, to)
+    val startIdx = pos - from
+
     PlayerActivity.startPlaylist(
         ctx = ctx,
-        urls = ArrayList(liveTiles.map {
-            val e = if (it.ext.isNotEmpty()) it.ext else "ts"
-            "$host/live/$user/$pass/${it.id}.$e"
-        }),
-        titles = ArrayList(liveTiles.map { it.name }),
-        ids = ArrayList(liveTiles.map { it.id }),
-        icons = ArrayList(liveTiles.map { it.icon }),
-        exts = ArrayList(liveTiles.map { it.ext }),
-        startIndex = if (idx >= 0) idx else 0,
+        urls = ArrayList(slice.map { "$host/live/$user/$pass/${it.id}.ts" }),
+        titles = ArrayList(slice.map { it.name }),
+        ids = ArrayList(slice.map { it.id }),
+        icons = ArrayList(slice.map { "" }),
+        exts = ArrayList(slice.map { "ts" }),
+        startIndex = startIdx,
         section = Section.LIVE.name,
         resumable = false
     )
