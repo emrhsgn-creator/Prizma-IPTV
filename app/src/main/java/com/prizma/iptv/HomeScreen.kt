@@ -52,7 +52,6 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -76,7 +75,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import coil.size.Scale
 
 private val BarStart = Color(0xFF23306E)
 private val BarEnd = Color(0xFF5B3FA8)
@@ -395,22 +393,24 @@ fun HomeScreen(
                 val showingFav = selectedCat == FAV_CAT
                 val q = query.trim()
 
-                val tiles: List<Tile> = when {
-                    showingFav -> {
-                        val base = sectionFavs.map { it.toTile() }
-                        when (sortMode) {
-                            SortMode.MANUAL -> base
-                            SortMode.NAME -> base.sortedBy { it.name.lowercase() }
-                            SortMode.RATING -> base.sortedByDescending { ratingOf(it.rating) }
-                            SortMode.ADDED -> base.sortedByDescending { it.order }
-                        }.filter { q.isEmpty() || it.name.contains(q, true) }
-                    }
-                    else -> data.items
-                        .filter { s ->
-                            (selectedCat.isEmpty() || s.categoryId == selectedCat) &&
-                                (q.isEmpty() || s.name.contains(q, true))
+                val tiles: List<Tile> = remember(data, selectedCat, q, sortMode, sectionFavs) {
+                    when {
+                        showingFav -> {
+                            val base = sectionFavs.map { it.toTile() }
+                            when (sortMode) {
+                                SortMode.MANUAL -> base
+                                SortMode.NAME -> base.sortedBy { it.name.lowercase() }
+                                SortMode.RATING -> base.sortedByDescending { ratingOf(it.rating) }
+                                SortMode.ADDED -> base.sortedByDescending { it.order }
+                            }.filter { q.isEmpty() || it.name.contains(q, true) }
                         }
-                        .map { it.toTile(sec.name) }
+                        else -> data.items
+                            .filter { s ->
+                                (selectedCat.isEmpty() || s.categoryId == selectedCat) &&
+                                    (q.isEmpty() || s.name.contains(q, true))
+                            }
+                            .map { it.toTile(sec.name) }
+                    }
                 }
 
                 val toggleFav: (Tile) -> Unit = { t ->
@@ -711,6 +711,7 @@ private fun Shelf(title: String, content: LazyListScope.() -> Unit) {
 
 @Composable
 private fun ShelfTile(t: Tile, onClick: () -> Unit) {
+    val ctx = LocalContext.current
     val live = t.sectionName == Section.LIVE.name
     Column(Modifier.width(if (live) 165.dp else 112.dp)) {
         Box(
@@ -724,7 +725,7 @@ private fun ShelfTile(t: Tile, onClick: () -> Unit) {
         ) {
             if (t.icon.isNotEmpty()) {
                 AsyncImage(
-                    model = ImageRequest.Builder(LocalContext.current)
+                    model = ImageRequest.Builder(ctx)
                         .data(t.icon)
                         .size(if (live) 340 else 230)
                         .crossfade(false)
@@ -895,7 +896,6 @@ private fun PosterTile(
                     model = ImageRequest.Builder(ctx)
                         .data(t.icon)
                         .size(if (live) 320 else 240)
-                        .scale(Scale.FILL)
                         .crossfade(false)
                         .build(),
                     contentDescription = null,
@@ -913,16 +913,6 @@ private fun PosterTile(
                 )
             }
             if (t.rating.isNotEmpty()) RatingBadge(Modifier.align(Alignment.TopEnd), t.rating)
-            if (fav && !showFavButton) {
-                Icon(
-                    Icons.Default.Star, null,
-                    tint = Color(0xFFF5C518),
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(5.dp)
-                        .size(14.dp)
-                )
-            }
             if (t.progress > 0f) {
                 Box(
                     Modifier
@@ -964,16 +954,23 @@ private fun PosterTile(
                         fontSize = 9.sp
                     )
                 }
-                Box(
-                    Modifier
-                        .tvFocus(RoundedCornerShape(6.dp), 1.0f)
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(PrizmaSurface)
-                        .clickable { showEpg = true }
-                        .padding(horizontal = 12.dp, vertical = 5.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("i", color = Color(0xFF8A90A0), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                if (live) {
+                    Box(
+                        Modifier
+                            .tvFocus(RoundedCornerShape(6.dp), 1.0f)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(PrizmaSurface)
+                            .clickable { showEpg = true }
+                            .padding(horizontal = 12.dp, vertical = 5.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            "i",
+                            color = Color(0xFF8A90A0),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             }
         }
