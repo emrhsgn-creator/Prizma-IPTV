@@ -243,20 +243,7 @@ fun HomeScreen(
         loading = false
     }
 
-    LaunchedEffect(tab, reload) {
-        if (tab != 0) return@LaunchedEffect
-        for (sec in listOf(Section.VOD, Section.SERIES)) {
-            if (cache.containsKey(sec)) continue
-            try {
-                val cats = XtreamApi.categories(host, user, pass, sec)
-                val items = XtreamApi.allStreams(host, user, pass, sec)
-                val counts = items.groupingBy { it.categoryId }.eachCount()
-                cache[sec] = SectionData(cats.map { it.copy(count = counts[it.id] ?: 0) }, items)
-            } catch (e: Exception) {
-                // ana sayfa rafları sessizce boş kalır
-            }
-        }
-    }
+    
 
     BackHandler(enabled = tab != 0 || selectedCat.isNotEmpty() || query.isNotEmpty()) {
         when {
