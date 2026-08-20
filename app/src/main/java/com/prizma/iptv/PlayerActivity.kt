@@ -74,6 +74,12 @@ import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.PlayerView
 import kotlinx.coroutines.delay
 import java.util.Locale
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 
 private data class TrackOption(
     val label: String,
@@ -215,6 +221,7 @@ fun PlayerScreen(
     var viewRef by remember { mutableStateOf<PlayerView?>(null) }
     var barVisible by remember { mutableStateOf(true) }
     var triedFallback by remember { mutableStateOf(false) }
+    var showList by remember { mutableStateOf(false) }
 
     val live = section == Section.LIVE.name
     val hasList = urls.size > 1
@@ -273,13 +280,16 @@ fun PlayerScreen(
         player.playWhenReady = true
     }
 
-    DisposableEffect(locked, showMenu, hasList, live) {
+        DisposableEffect(locked, showMenu, showList, hasList, live) {
         PlayerBus.onKey = handler@{ code ->
-            if (showMenu) return@handler false
+            if (showMenu || showList) return@handler false
             if (locked) {
                 return@handler code != KeyEvent.KEYCODE_BACK
             }
             when (code) {
+                KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                    if (hasList) { showList = true; true } else false
+                }
                 KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
                     viewRef?.showController()
                     false
@@ -380,6 +390,7 @@ fun PlayerScreen(
 
     BackHandler {
         when {
+            showList -> showList = false
             showMenu -> showMenu = false
             locked -> locked = false
             else -> onBack()
@@ -490,7 +501,10 @@ fun PlayerScreen(
                             modifier = Modifier.padding(end = 8.dp)
                         )
                     }
-                    RoundBtn("⋮", 18.sp) { showMenu = true }
+                                       if (hasList) {
+                        RoundBtn("☰", 16.sp) { showList = true }
+                        Spacer(Modifier.width(6.dp))
+                    } RoundBtn("⋮", 18.sp) { showMenu = true }
                 }
             }
         }
@@ -519,7 +533,20 @@ fun PlayerScreen(
             )
         }
 
-        if (showMenu) {
+        
+                if (showList) {
+            ChannelListPanel(
+                titles = titles,
+                current = current,
+                live = live,
+                onPick = { i ->
+                    player.seekTo(i, 0L)
+                    player.playWhenReady = true
+                    showList = false
+                },
+                onDismiss = { showList = false }
+            )
+        } if (showMenu) {
             SettingsPanel(
                 player = player,
                 tracks = tracks,
@@ -722,4 +749,117 @@ private fun Pill(label: String, selected: Boolean, onClick: () -> Unit) {
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 7.dp)
     )
+}
+@Composable
+private fun ChannelListPanel(
+    titles: List<String>,
+    current: Int,
+    live: Boolean,
+    onPick: (Int) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val focusReq = remember { androidx.compose.ui.focus.FocusRequester() }
+
+    LaunchedEffect(Unit) {
+        listState.scrollToItem((current - 3).coerceAtLeast(0))
+        runCatching { focusReq.requestFocus() }
+    }
+
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Color(0x66000000))
+            .clickable(onClick = onDismiss)
+    ) {
+        Column(
+            Modifier
+                .align(Alignment.CenterEnd)
+                .fillMaxHeight()
+                .width(330.dp)
+                .background(Color(0xF20E1018))
+                .clickable(enabled = false) { }
+        ) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFF1B2350))
+                    .padding(horizontal = 14.dp, vertical = 11.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    if (live) "Kanallar" else "Bölümler",
+                    color = Color.White,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f)
+                )
+                Text("${titles.size}", color = Color(0xFF8A90A0), fontSize = 11.sp)
+            }
+
+            androidx.compose.foundation.lazy.LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxSize()
+            ) {
+                androidx.compose.foundation.lazy.itemsIndexed(titles) { i, name ->
+                    ChannelRow(
+                        index = i,
+                        name = name,
+                        playing = i == current,
+                        modifier = if (i == current) Modifier.focusRequester(focusReq)
+                        else Modifier
+                    ) { onPick(i) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChannelRow(
+    index: Int,
+    name: String,
+    playing: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    var focused by remember { mutableStateOf(false) }
+
+    Row(
+        modifier
+            .fillMaxWidth()
+            .background(
+                when {
+                    focused -> Color(0x404F8DF7)
+                    playing -> Color(0x264F8DF7)
+                    else -> Color.Transparent
+                }
+            )
+            .onFocusChanged { focused = it.isFocused }
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 11.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            "${index + 1}",
+            color = Color(0xFF5D6472),
+            fontSize = 10.sp,
+            modifier = Modifier.width(30.dp)
+        )
+        Text(
+            name,
+            color = when {
+                focused || playing -> Color.White
+                else -> Color(0xFFC3C8D4)
+            },
+            fontSize = 12.sp,
+            fontWeight = if (playing) FontWeight.Bold else FontWeight.Normal,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
+        if (playing) {
+            Text("▶", color = PrizmaAccent, fontSize = 11.sp)
+        }
+    }
 }
