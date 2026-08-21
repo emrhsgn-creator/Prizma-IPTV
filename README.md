@@ -72,8 +72,8 @@ cihazı algılayıp kendini ona göre kurar.
 APK'yı GitHub Actions çıktılarından indirebilirsin:
 **Actions → Build APK → prizma-iptv-release**.
 
-ABI'ye göre ayrı APK'lar ve tek bir `app-universal-release.apk` üretilir.
-TV kutusuna elden kurulumda **universal** olanı kullan.
+Tek bir `app-release.apk` üretilir; dört mimariyi de içerir ve telefon,
+tablet, TV kutusu fark etmeksizin her cihaza kurulur.
 
 İlk açılışta bağlantı türünü seç:
 

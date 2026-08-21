@@ -32,8 +32,14 @@ android {
         applicationId = "com.prizma.iptv"
         minSdk = 21
         targetSdk = 35
-        versionCode = 4
-        versionName = "2.0.1"
+        versionCode = 5
+        versionName = "2.0.2"
+
+        // Tek APK uretilir; dort mimariyi de icerir ve her cihaza kurulur.
+        // ABI'ye gore bolmek elden kurulumda fayda saglamiyordu.
+        ndk {
+            abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
+        }
     }
 
     signingConfigs {
@@ -61,16 +67,6 @@ android {
                 "proguard-rules.pro"
             )
             if (canSign) signingConfig = signingConfigs.getByName("release")
-        }
-    }
-
-    // TV kutularına tek APK atabilmek için universal APK da üretilir.
-    splits {
-        abi {
-            isEnable = true
-            reset()
-            include("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
-            isUniversalApk = true
         }
     }
 
