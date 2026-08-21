@@ -11,7 +11,10 @@ object Paths {
 
     fun init(ctx: Context) {
         if (::root.isInitialized) return
-        root = File(ctx.applicationContext.filesDir, "prizma")
+        // Application.attachBaseContext icinden cagrildiginda applicationContext
+        // henuz null olur; boyle durumlarda verilen context dogrudan kullanilir.
+        val target = ctx.applicationContext ?: ctx
+        root = File(target.filesDir, "prizma")
         root.mkdirs()
     }
 

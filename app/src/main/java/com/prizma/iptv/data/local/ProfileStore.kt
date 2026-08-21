@@ -26,7 +26,10 @@ object ProfileStore {
 
     fun init(ctx: Context) {
         if (::sp.isInitialized) return
-        sp = ctx.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+        // Application.attachBaseContext icinden cagrildiginda applicationContext
+        // henuz null olur; boyle durumlarda verilen context dogrudan kullanilir.
+        val target = ctx.applicationContext ?: ctx
+        sp = target.getSharedPreferences(FILE, Context.MODE_PRIVATE)
         _profiles.value = read()
         migrateLegacy(ctx)
     }
