@@ -310,4 +310,7 @@
     <string name="login_user_required">Enter your username.</string>
     <string name="s_pin_short">PIN must be 4 digits.</string>
 
+    <string name="player_stats_source">Source</string>
+    <string name="player_stats_index">Position</string>
+
 </resources>

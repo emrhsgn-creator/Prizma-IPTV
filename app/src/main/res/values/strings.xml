@@ -324,4 +324,7 @@
     <string name="login_user_required">Kullanıcı adını gir.</string>
     <string name="s_pin_short">PIN 4 haneli olmalı.</string>
 
+    <string name="player_stats_source">Kaynak</string>
+    <string name="player_stats_index">Sıra</string>
+
 </resources>

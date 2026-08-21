@@ -394,6 +394,8 @@ fun StatsOverlay(controller: PlayerController, modifier: Modifier = Modifier) {
     val labelBitrate = stringResource(R.string.player_stats_bitrate)
     val labelBuffer = stringResource(R.string.player_stats_buffer)
     val labelDropped = stringResource(R.string.player_stats_dropped)
+    val labelSource = stringResource(R.string.player_stats_source)
+    val labelIndex = stringResource(R.string.player_stats_index)
 
     LaunchedEffect(Unit) {
         while (true) {
@@ -421,7 +423,11 @@ fun StatsOverlay(controller: PlayerController, modifier: Modifier = Modifier) {
                 labelBuffer to Fmt.duration(
                     (player.bufferedPosition - player.currentPosition).coerceAtLeast(0L)
                 ),
-                labelDropped to (counters?.droppedBufferCount ?: 0).toString()
+                labelDropped to (counters?.droppedBufferCount ?: 0).toString(),
+                // Teshis: gercekten hangi adresin oynatildigi.
+                labelSource to (controller.current?.url?.substringAfterLast('/') ?: "-"),
+                labelIndex to ((controller.currentIndex + 1).toString() + " / " +
+                    controller.items.size)
             )
             kotlinx.coroutines.delay(1_000)
         }
@@ -437,7 +443,7 @@ fun StatsOverlay(controller: PlayerController, modifier: Modifier = Modifier) {
         snapshot.forEach { (label, value) ->
             Row(Modifier.padding(vertical = 2.dp)) {
                 Text(label, color = Ink.TextMuted, fontSize = 10.sp, modifier = Modifier.width(110.dp))
-                Text(value, color = Color.White, fontSize = 10.sp)
+                Text(value, color = Color.White, fontSize = 10.sp, maxLines = 2)
             }
         }
     }

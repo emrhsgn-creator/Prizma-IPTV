@@ -16,6 +16,7 @@ import com.prizma.iptv.data.model.Profile
 import com.prizma.iptv.data.model.SavedItem
 import com.prizma.iptv.data.model.Section
 import com.prizma.iptv.data.model.ServerInfo
+import com.prizma.iptv.data.model.SourceType
 import com.prizma.iptv.data.model.StreamItem
 import com.prizma.iptv.data.remote.XtreamApi
 import kotlinx.coroutines.CoroutineScope
@@ -56,8 +57,14 @@ class Session(val profile: Profile) {
 
     // ---------------------------------------------------------------- adresler
 
+    /**
+     * Hazir adres yalnizca M3U kaynaklarinda anlamli. Xtream profillerinde
+     * adres her zaman kanal kimliginden kurulur; boylece onbellekten gelen
+     * bozuk bir alan yanlis yayin acilmasina yol acamaz.
+     */
     private fun liveUrl(item: StreamItem, extension: String = "ts"): String =
-        item.url.ifBlank { XtreamApi.liveUrl(profile, item.id, extension) }
+        if (profile.type == SourceType.M3U && item.url.isNotBlank()) item.url
+        else XtreamApi.liveUrl(profile, item.id, extension)
 
     fun liveItem(item: StreamItem): PlayItem = PlayItem(
         kind = PlayKind.LIVE,
@@ -77,7 +84,8 @@ class Session(val profile: Profile) {
             kind = PlayKind.MOVIE,
             id = item.id,
             title = item.name,
-            url = item.url.ifBlank { XtreamApi.movieUrl(profile, item.id, ext) },
+            url = if (profile.type == SourceType.M3U && item.url.isNotBlank()) item.url
+            else XtreamApi.movieUrl(profile, item.id, ext),
             icon = item.icon,
             extension = ext
         )
