@@ -1,124 +1,90 @@
 package com.prizma.iptv
 
+import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import kotlinx.coroutines.launch
-
-val PrizmaBg = Color(0xFF101014)
-val PrizmaSurface = Color(0xFF1A1A21)
-val PrizmaAccent = Color(0xFF4F8DF7)
-
-object Refresh {
-    var tick by mutableIntStateOf(0)
-}
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.prizma.iptv.core.LocaleHelper
+import com.prizma.iptv.data.model.Section
+import com.prizma.iptv.ui.common.LoadingBox
+import com.prizma.iptv.ui.home.HomeScreen
+import com.prizma.iptv.ui.home.Launch
+import com.prizma.iptv.ui.login.LoginScreen
+import com.prizma.iptv.ui.login.MainViewModel
+import com.prizma.iptv.ui.login.Stage
+import com.prizma.iptv.ui.login.rememberSavedProfiles
+import com.prizma.iptv.ui.theme.Ink
+import com.prizma.iptv.ui.theme.PrizmaTheme
 
 class MainActivity : ComponentActivity() {
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        setContent { PrizmaApp() }
+
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(LocaleHelper.wrap(newBase))
     }
 
-    override fun onResume() {
-        super.onResume()
-        Refresh.tick++
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContent {
+            PrizmaTheme {
+                Surface(color = Ink.Bg, modifier = Modifier.fillMaxSize()) {
+                    PrizmaRoot()
+                }
+            }
+        }
     }
 }
 
 @Composable
-fun PrizmaApp() {
-    MaterialTheme(
-        colorScheme = darkColorScheme(
-            primary = PrizmaAccent,
-            background = PrizmaBg,
-            surface = PrizmaSurface
+fun PrizmaRoot() {
+    val viewModel: MainViewModel = viewModel()
+    val stage by viewModel.stage.collectAsStateWithLifecycle()
+    val warning by viewModel.accountWarning.collectAsStateWithLifecycle()
+    val profiles = rememberSavedProfiles()
+
+    when (val current = stage) {
+        Stage.Booting -> LoadingBox(Modifier.fillMaxSize())
+
+        is Stage.SignIn -> LoginScreen(
+            state = current,
+            profiles = profiles,
+            canCancel = profiles.isNotEmpty(),
+            onDraftChange = viewModel::updateDraft,
+            onSubmit = viewModel::signIn,
+            onPickProfile = viewModel::switchProfile,
+            onDeleteProfile = viewModel::removeProfile,
+            onCancel = viewModel::cancelAddProfile
         )
-    ) {
-        val ctx = LocalContext.current
-        val scope = rememberCoroutineScope()
 
-        var host by remember { mutableStateOf("") }
-        var user by remember { mutableStateOf("") }
-        var pass by remember { mutableStateOf("") }
-        var account by remember { mutableStateOf<Account?>(null) }
-        var autoTried by remember { mutableStateOf(false) }
-        var showSettings by remember { mutableStateOf(false) }
-        var forceLogin by remember { mutableStateOf(false) }
-        var cacheEpoch by remember { mutableIntStateOf(0) }
+        is Stage.Ready -> {
+            val ctx = LocalContext.current
+            val session = current.session
+            val sections by session.catalog.sections.collectAsStateWithLifecycle()
 
-        LaunchedEffect(Unit) {
-            val saved = Prefs.load(ctx)
-            if (saved != null) {
-                host = saved.first; user = saved.second; pass = saved.third
-                try {
-                    account = XtreamApi.login(host, user, pass)
-                } catch (e: Exception) {
-                    account = null
+            // "Açılışta son kanalı aç" ayarı: canlı liste hazır olur olmaz
+            // bir kereye mahsus tetiklenir.
+            LaunchedEffect(sections.containsKey(Section.LIVE)) {
+                if (sections.containsKey(Section.LIVE)) {
+                    Launch.resumeLastChannelOnce(ctx, session)
                 }
             }
-            autoTried = true
-        }
 
-        val acc = account
-
-        when {
-            acc == null || forceLogin -> LoginScreen(
-                initialHost = if (forceLogin) "" else host,
-                initialUser = if (forceLogin) "" else user,
-                initialPass = if (forceLogin) "" else pass,
-                ready = autoTried
-            ) { h, u, p, a ->
-                host = h; user = u; pass = p; account = a
-                Prefs.save(ctx, h, u, p)
-                forceLogin = false
-                showSettings = false
-                cacheEpoch++
-            }
-
-            showSettings -> SettingsScreen(
-                account = acc,
-                onBack = { showSettings = false },
-                onSwitchProfile = { prof ->
-                    Prefs.setActive(ctx, prof)
-                    scope.launch {
-                        try {
-                            val a = XtreamApi.login(prof.host, prof.user, prof.pass)
-                            host = prof.host; user = prof.user; pass = prof.pass
-                            account = a
-                            cacheEpoch++
-                            showSettings = false
-                        } catch (e: Exception) {
-                            forceLogin = true
-                        }
-                    }
-                },
-                onAddProfile = { forceLogin = true },
-                onClearCache = { cacheEpoch++ }
-            )
-
-            else -> HomeScreen(
-                host = host,
-                user = user,
-                pass = pass,
-                account = acc,
-                cacheEpoch = cacheEpoch,
-                onSettings = { showSettings = true },
-                onLogout = {
-                    Prefs.clear(ctx)
-                    account = null
-                }
+            HomeScreen(
+                session = session,
+                warning = warning,
+                onDismissWarning = viewModel::dismissWarning,
+                onAddProfile = viewModel::addProfile,
+                onSwitchProfile = viewModel::switchProfile,
+                onRemoveProfile = viewModel::removeProfile,
+                onSignOut = viewModel::signOut
             )
         }
     }

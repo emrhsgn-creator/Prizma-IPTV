@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="prizma_bg">#FF0B0D14</color>
+    <color name="prizma_surface">#FF161923</color>
+    <color name="prizma_accent">#FF4F8DF7</color>
+</resources>

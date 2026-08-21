@@ -1,7 +1,20 @@
-name: Anahtar uret
+name: Imza anahtari uret
+
+# Yeni bir imza anahtari uretir ve base64 ciktisini is akisi gunlugune yazar.
+# Ciktiyi KEYSTORE_BASE64 secret'ina, sifreyi de KEYSTORE_PASSWORD /
+# KEY_PASSWORD secret'larina kaydet. Gunlukleri sonra silmeyi unutma.
 
 on:
   workflow_dispatch:
+    inputs:
+      alias:
+        description: "Anahtar takma adi"
+        required: true
+        default: prizma
+      validity_days:
+        description: "Gecerlilik (gun)"
+        required: true
+        default: "10000"
 
 jobs:
   keygen:
@@ -13,15 +26,26 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Keystore olustur
+      - name: Rastgele sifre uret ve keystore olustur
+        env:
+          ALIAS: ${{ github.event.inputs.alias }}
+          VALIDITY: ${{ github.event.inputs.validity_days }}
         run: |
+          PASS="$(openssl rand -base64 24 | tr -d '=+/' | cut -c1-24)"
           keytool -genkeypair -v \
             -keystore prizma.jks \
-            -keyalg RSA -keysize 2048 -validity 10000 \
-            -alias prizma \
-            -storepass prizma2026 -keypass prizma2026 \
+            -keyalg RSA -keysize 4096 -validity "$VALIDITY" \
+            -alias "$ALIAS" \
+            -storepass "$PASS" -keypass "$PASS" \
             -dname "CN=Prizma IPTV, OU=Personal, O=Prizma, L=Istanbul, C=TR"
-          echo "--- KEYSTORE_BASE64 (asagidaki blogu tamamen kopyala) ---"
+
+          echo "::group::KEYSTORE_PASSWORD ve KEY_PASSWORD secret degeri"
+          echo "$PASS"
+          echo "::endgroup::"
+
+          echo "::group::KEYSTORE_BASE64 secret degeri (tamamini kopyala)"
           base64 -w 0 prizma.jks
           echo ""
-          echo "--- BITTI ---"
+          echo "::endgroup::"
+
+          echo "KEY_ALIAS secret degeri: $ALIAS"

@@ -1,28 +1,43 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- Hem telefon/tablet hem de Android TV / Fire TV üzerinde çalışır. -->
     <uses-feature android:name="android.software.leanback" android:required="false" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+    <uses-feature android:name="android.hardware.gamepad" android:required="false" />
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
 
     <application
-        android:name=".PrizmaApplication"
+        android:name=".core.PrizmaApp"
         android:allowBackup="true"
-        android:label="Prizma IPTV"
+        android:fullBackupContent="@xml/backup_rules"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:label="@string/app_name"
         android:icon="@drawable/ic_launcher"
+        android:roundIcon="@drawable/ic_launcher"
         android:banner="@drawable/ic_banner"
         android:supportsRtl="true"
         android:usesCleartextTraffic="true"
+        android:networkSecurityConfig="@xml/network_security_config"
         android:largeHeap="true"
         android:hardwareAccelerated="true"
-        android:theme="@style/Theme.Prizma">
+        android:enableOnBackInvokedCallback="true"
+        android:theme="@style/Theme.Prizma"
+        tools:targetApi="33">
 
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:launchMode="singleTask"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|keyboard|navigation|uiMode|density|locale|layoutDirection|fontScale"
             android:theme="@style/Theme.Prizma">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -32,21 +47,49 @@
         </activity>
 
         <activity
-            android:name=".PlayerActivity"
+            android:name=".player.PlayerActivity"
             android:exported="false"
-            android:screenOrientation="sensorLandscape"
-            android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout"
-            android:theme="@style/Theme.Prizma" />
+            android:launchMode="singleTask"
+            android:taskAffinity=".player"
+            android:supportsPictureInPicture="true"
+            android:resizeableActivity="true"
+            android:autoRemoveFromRecents="true"
+            android:screenOrientation="unspecified"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|keyboard|navigation|uiMode|density|locale|layoutDirection|fontScale"
+            android:theme="@style/Theme.Prizma.Player"
+            tools:ignore="DiscouragedApi" />
+
         <activity
-            android:name=".SeriesActivity"
+            android:name=".ui.detail.MovieActivity"
             android:exported="false"
-            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode|density|locale|layoutDirection|fontScale"
             android:theme="@style/Theme.Prizma" />
+
         <activity
-            android:name=".MovieActivity"
+            android:name=".ui.detail.SeriesActivity"
             android:exported="false"
-            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode|density|locale|layoutDirection|fontScale"
             android:theme="@style/Theme.Prizma" />
+
+        <!-- Arka planda ses / bildirim kontrolleri / kulaklık tuşları -->
+        <service
+            android:name=".player.PlaybackService"
+            android:exported="true"
+            android:foregroundServiceType="mediaPlayback"
+            tools:ignore="ExportedService">
+            <intent-filter>
+                <action android:name="androidx.media3.session.MediaSessionService" />
+                <action android:name="android.media.browse.MediaBrowserService" />
+            </intent-filter>
+        </service>
+
+        <receiver
+            android:name="androidx.media3.session.MediaButtonReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MEDIA_BUTTON" />
+            </intent-filter>
+        </receiver>
 
     </application>
 </manifest>

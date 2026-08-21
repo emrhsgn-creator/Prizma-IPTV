@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!--
+      IPTV panellerinin büyük bölümü hâlâ düz HTTP üzerinden yayın veriyor,
+      bu yüzden cleartext trafiğe izin veriliyor. Sistem sertifika deposuna
+      ek olarak kullanıcı sertifikaları da kabul edilir (kurumsal proxy'ler için).
+    -->
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <include domain="sharedpref" path="prizma_settings.xml" />
+    <include domain="file" path="prizma/" />
+    <exclude domain="sharedpref" path="prizma_secure.xml" />
+</full-backup-content>

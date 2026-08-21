@@ -1,0 +1,327 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="app_name">Prizma IPTV</string>
+
+    <!-- Genel -->
+    <string name="ok">Tamam</string>
+    <string name="cancel">Vazgeç</string>
+    <string name="close">Kapat</string>
+    <string name="back">Geri</string>
+    <string name="retry">Tekrar dene</string>
+    <string name="loading">Yükleniyor…</string>
+    <string name="save">Kaydet</string>
+    <string name="delete">Sil</string>
+    <string name="refresh">Yenile</string>
+    <string name="search">Ara</string>
+    <string name="search_hint">Kanal, film veya dizi ara…</string>
+    <string name="settings">Ayarlar</string>
+    <string name="logout">Çıkış</string>
+    <string name="empty_content">İçerik bulunamadı.</string>
+    <string name="all">Tümü</string>
+    <string name="none">Yok</string>
+    <string name="auto">Otomatik</string>
+    <string name="on">Açık</string>
+    <string name="off">Kapalı</string>
+    <string name="unknown">Bilinmiyor</string>
+    <string name="count_items">%1$d içerik</string>
+
+    <!-- Hatalar -->
+    <string name="error_generic">Bir şeyler ters gitti.</string>
+    <string name="error_network">Sunucuya ulaşılamadı. İnternet bağlantını kontrol et.</string>
+    <string name="error_timeout">Sunucu zamanında yanıt vermedi.</string>
+    <string name="error_http">Sunucu hatası (HTTP %1$d).</string>
+    <string name="error_parse">Sunucu geçerli bir yanıt vermedi. Adresi kontrol et.</string>
+    <string name="error_auth">Kullanıcı adı veya şifre hatalı.</string>
+    <string name="error_account_inactive">Hesap aktif değil (durum: %1$s).</string>
+    <string name="error_account_expired">Aboneliğin süresi dolmuş.</string>
+    <string name="error_no_account_info">Hesap bilgisi alınamadı.</string>
+    <string name="error_empty_playlist">Liste boş döndü.</string>
+
+    <!-- Giriş -->
+    <string name="login_title">PRIZMA IPTV</string>
+    <string name="login_subtitle">Hesabınla giriş yap</string>
+    <string name="login_type">Bağlantı türü</string>
+    <string name="login_type_xtream">Xtream Codes</string>
+    <string name="login_type_m3u">M3U listesi</string>
+    <string name="login_host">Sunucu adresi</string>
+    <string name="login_host_hint">http://ornek.com:8080</string>
+    <string name="login_m3u_url">M3U bağlantısı</string>
+    <string name="login_m3u_hint">http://ornek.com/get.php?…</string>
+    <string name="login_user">Kullanıcı adı</string>
+    <string name="login_pass">Şifre</string>
+    <string name="login_label">Profil adı (isteğe bağlı)</string>
+    <string name="login_epg_url">XMLTV EPG bağlantısı (isteğe bağlı)</string>
+    <string name="login_user_agent">User-Agent (isteğe bağlı)</string>
+    <string name="login_advanced">Gelişmiş</string>
+    <string name="login_button">Giriş yap</string>
+    <string name="login_busy">Bağlanıyor…</string>
+    <string name="login_saved_profiles">Kayıtlı profiller</string>
+
+    <!-- Gezinme -->
+    <string name="nav_home">Ana Sayfa</string>
+    <string name="nav_live">Canlı TV</string>
+    <string name="nav_movies">Filmler</string>
+    <string name="nav_series">Diziler</string>
+    <string name="nav_guide">Yayın Akışı</string>
+    <string name="nav_search">Ara</string>
+    <string name="nav_recent">Son İzlenenler</string>
+    <string name="nav_settings">Ayarlar</string>
+
+    <!-- Ana sayfa rafları -->
+    <string name="shelf_continue">Devam Et</string>
+    <string name="shelf_favorites">Favoriler</string>
+    <string name="shelf_recent">Son İzlenenler</string>
+    <string name="shelf_live_favorites">Favori Kanallar</string>
+    <string name="shelf_new_movies">Son Eklenen Filmler</string>
+    <string name="shelf_new_series">Son Eklenen Diziler</string>
+    <string name="shelf_top_movies">En Beğenilen Filmler</string>
+    <string name="shelf_top_series">En Beğenilen Diziler</string>
+    <string name="shelf_on_now">Şu An Yayında</string>
+    <string name="home_greeting_hint">Kataloğun hazırlanıyor…</string>
+
+    <!-- Katalog -->
+    <string name="categories">Kategoriler</string>
+    <string name="cat_all">TÜMÜ</string>
+    <string name="cat_favorites">FAVORİLER</string>
+    <string name="cat_recent_added">YENİ EKLENENLER</string>
+    <string name="sort_by">Sıralama</string>
+    <string name="sort_default">Varsayılan</string>
+    <string name="sort_manual">Elle</string>
+    <string name="sort_name">A-Z</string>
+    <string name="sort_name_desc">Z-A</string>
+    <string name="sort_rating">Puan</string>
+    <string name="sort_added">Eklenme</string>
+    <string name="sort_number">Kanal no</string>
+    <string name="favorite">Favori</string>
+    <string name="favorited">Favoride</string>
+    <string name="fav_added">Favorilere eklendi</string>
+    <string name="fav_removed">Favorilerden çıkarıldı</string>
+    <string name="history_removed">Geçmişten silindi</string>
+    <string name="history_cleared">Geçmiş temizlendi</string>
+    <string name="clear_history">Geçmişi temizle</string>
+    <string name="history_empty">Henüz bir şey izlemedin.</string>
+    <string name="move_left">Sola taşı</string>
+    <string name="move_right">Sağa taşı</string>
+    <string name="catalog_updated">Liste güncellendi</string>
+    <string name="loading_catalog">%1$s yükleniyor…</string>
+
+    <!-- Arama -->
+    <string name="search_empty">Aramak için yazmaya başla.</string>
+    <string name="search_no_result">Sonuç yok: %1$s</string>
+    <string name="search_results">%1$d sonuç</string>
+
+    <!-- Yayın akışı / EPG -->
+    <string name="guide_title">Yayın Akışı</string>
+    <string name="guide_now">Şimdi</string>
+    <string name="guide_next">Sıradaki</string>
+    <string name="guide_no_data">Bu kanal için yayın akışı yok.</string>
+    <string name="guide_loading">Yayın akışı yükleniyor…</string>
+    <string name="guide_epg_missing">EPG verisi yok. Ayarlardan yenileyebilirsin.</string>
+    <string name="guide_refresh">EPG yenile</string>
+    <string name="guide_refreshing">EPG indiriliyor…</string>
+    <string name="guide_refreshed">EPG güncellendi (%1$d program)</string>
+    <string name="guide_today">Bugün</string>
+    <string name="guide_tomorrow">Yarın</string>
+    <string name="guide_yesterday">Dün</string>
+    <string name="guide_watch">İzle</string>
+    <string name="guide_catchup">Geri sar (catch-up)</string>
+    <string name="guide_catchup_unavailable">Bu kanalda arşiv yok.</string>
+    <string name="guide_catchup_too_old">Bu program arşiv süresinin dışında.</string>
+    <string name="guide_program">Program</string>
+    <string name="guide_jump_now">Şimdiye git</string>
+
+    <!-- Detay -->
+    <string name="detail_play">Oynat</string>
+    <string name="detail_resume">Devam et</string>
+    <string name="detail_restart">Baştan oynat</string>
+    <string name="detail_trailer">Fragman</string>
+    <string name="detail_plot">Özet</string>
+    <string name="detail_cast">Oyuncular</string>
+    <string name="detail_director">Yönetmen</string>
+    <string name="detail_genre">Tür</string>
+    <string name="detail_duration">Süre</string>
+    <string name="detail_country">Ülke</string>
+    <string name="detail_released">Yayın tarihi</string>
+    <string name="detail_no_info">Bu içerik için ek bilgi bulunamadı.</string>
+    <string name="detail_season">Sezon %1$d</string>
+    <string name="detail_episode_short">S%1$dB%2$d</string>
+    <string name="detail_resume_at">Kaldığın yer: %1$s</string>
+    <string name="detail_play_all">Sezonu oynat</string>
+    <string name="detail_watched">İzlendi</string>
+    <string name="detail_mark_watched">İzlendi işaretle</string>
+    <string name="detail_mark_unwatched">İzlenmedi işaretle</string>
+    <string name="detail_next_episode">Sıradaki bölüm</string>
+
+    <!-- Oynatıcı -->
+    <string name="player_lock">Kilitle</string>
+    <string name="player_unlock">Kilidi aç</string>
+    <string name="player_locked">Ekran kilitlendi</string>
+    <string name="player_unlocked">Kilit açıldı</string>
+    <string name="player_channels">Kanallar</string>
+    <string name="player_episodes">Bölümler</string>
+    <string name="player_settings">Oynatıcı ayarları</string>
+    <string name="player_audio">Ses</string>
+    <string name="player_audio_none">Ses kanalı bulunamadı</string>
+    <string name="player_subtitle">Altyazı</string>
+    <string name="player_subtitle_off">Kapalı</string>
+    <string name="player_subtitle_size">Altyazı boyutu</string>
+    <string name="player_subtitle_style">Altyazı görünümü</string>
+    <string name="player_subtitle_bg">Altyazı arka planı</string>
+    <string name="player_subtitle_external">Dosyadan altyazı yükle</string>
+    <string name="player_subtitle_loaded">Altyazı yüklendi</string>
+    <string name="player_video">Görüntü kalitesi</string>
+    <string name="player_speed">Oynatma hızı</string>
+    <string name="player_speed_normal">Normal</string>
+    <string name="player_aspect">En-boy oranı</string>
+    <string name="player_aspect_fit">Sığdır</string>
+    <string name="player_aspect_crop">Kırp</string>
+    <string name="player_aspect_stretch">Ger</string>
+    <string name="player_aspect_16_9">16:9</string>
+    <string name="player_aspect_4_3">4:3</string>
+    <string name="player_size_small">Küçük</string>
+    <string name="player_size_medium">Orta</string>
+    <string name="player_size_large">Büyük</string>
+    <string name="player_size_huge">Çok büyük</string>
+    <string name="player_sleep">Uyku zamanlayıcı</string>
+    <string name="player_sleep_off">Kapalı</string>
+    <string name="player_sleep_minutes">%1$d dk</string>
+    <string name="player_sleep_end_of_item">Bu bölüm bitince</string>
+    <string name="player_sleep_set">Uyku zamanlayıcı: %1$s</string>
+    <string name="player_sleep_fired">Uyku zamanlayıcı çalıştı</string>
+    <string name="player_pip">Küçük ekran</string>
+    <string name="player_rotate">Ekranı döndür</string>
+    <string name="player_stats">Teknik bilgi</string>
+    <string name="player_stats_resolution">Çözünürlük</string>
+    <string name="player_stats_video_codec">Video kodeği</string>
+    <string name="player_stats_audio_codec">Ses kodeği</string>
+    <string name="player_stats_bitrate">Bit hızı</string>
+    <string name="player_stats_buffer">Tampon</string>
+    <string name="player_stats_dropped">Atlanan kare</string>
+    <string name="player_stats_decoder">Kod çözücü</string>
+    <string name="player_reconnecting">Bağlantı koptu, yeniden deneniyor (%1$d)…</string>
+    <string name="player_reconnect_failed">Yayına ulaşılamıyor.</string>
+    <string name="player_error">Oynatılamadı: %1$s</string>
+    <string name="player_alt_format">Alternatif format deneniyor…</string>
+    <string name="player_resume_notice">Kaldığın yerden devam ediliyor</string>
+    <string name="player_live">CANLI</string>
+    <string name="player_catchup">ARŞİV</string>
+    <string name="player_next">Sonraki</string>
+    <string name="player_prev">Önceki</string>
+    <string name="player_hint_dpad">Yukarı/aşağı: kanal · Sağ: liste · Menü: ayarlar · 0-9: kanal no</string>
+    <string name="player_channel_number">Kanal: %1$s</string>
+    <string name="player_channel_not_found">Kanal bulunamadı: %1$s</string>
+    <string name="player_last_channel">Önceki kanal</string>
+    <string name="player_brightness">Parlaklık</string>
+    <string name="player_volume">Ses</string>
+
+    <!-- Ayarlar -->
+    <string name="settings_account">Hesap</string>
+    <string name="settings_profiles">Kayıtlı profiller</string>
+    <string name="settings_playback">Oynatma</string>
+    <string name="settings_appearance">Görünüm</string>
+    <string name="settings_parental">Ebeveyn kontrolü</string>
+    <string name="settings_epg">Yayın akışı (EPG)</string>
+    <string name="settings_data">Veri</string>
+    <string name="settings_about">Hakkında</string>
+
+    <string name="s_username">Kullanıcı</string>
+    <string name="s_status">Durum</string>
+    <string name="s_expiry">Bitiş tarihi</string>
+    <string name="s_expiry_never">Süresiz</string>
+    <string name="s_connections">Bağlantı</string>
+    <string name="s_trial">Deneme hesabı</string>
+    <string name="s_server">Sunucu</string>
+    <string name="s_add_profile">+ Yeni profil ekle</string>
+    <string name="s_active">aktif</string>
+    <string name="s_switch_failed">Profile geçilemedi</string>
+
+    <string name="s_buffer">Tampon süresi</string>
+    <string name="s_buffer_desc">Yüksek değer donmayı azaltır, kanal açılışını yavaşlatır.</string>
+    <string name="s_buffer_low">Düşük</string>
+    <string name="s_buffer_normal">Normal</string>
+    <string name="s_buffer_high">Yüksek</string>
+    <string name="s_buffer_max">En yüksek</string>
+    <string name="s_buffer_value">%1$s (%2$d sn)</string>
+    <string name="s_applies_next">Sonraki oynatmada geçerli olacak</string>
+
+    <string name="s_autonext">Sonraki bölüm otomatik</string>
+    <string name="s_autonext_desc">Dizilerde bölüm bitince kendiliğinden devam eder.</string>
+    <string name="s_resume">Kaldığın yerden devam</string>
+    <string name="s_resume_desc">Film ve dizilerde izleme konumu hatırlanır.</string>
+    <string name="s_autoplay_last">Açılışta son kanalı aç</string>
+    <string name="s_autoplay_last_desc">Uygulama açıldığında en son izlenen canlı kanal başlatılır.</string>
+    <string name="s_decoder">Kod çözücü</string>
+    <string name="s_decoder_desc">Donanım hızlıdır. AC3/DTS sesli kanallarda ses gelmiyorsa yazılımı dene.</string>
+    <string name="s_decoder_hw">Donanım</string>
+    <string name="s_decoder_sw">Yazılım (FFmpeg)</string>
+    <string name="s_tunneling">Tünelli oynatma</string>
+    <string name="s_tunneling_desc">Bazı TV kutularında 4K akıcılığını artırır. Sorun çıkarsa kapat.</string>
+    <string name="s_reconnect">Otomatik yeniden bağlan</string>
+    <string name="s_reconnect_desc">Canlı yayın koptuğunda oynatıcı kendiliğinden tekrar bağlanır.</string>
+    <string name="s_background_audio">Arka planda ses</string>
+    <string name="s_background_audio_desc">Uygulamadan çıkınca ses devam eder, bildirimden kontrol edilir.</string>
+    <string name="s_autopip">Otomatik küçük ekran</string>
+    <string name="s_autopip_desc">Oynatma sırasında ana ekrana çıkınca küçük pencereye geçer.</string>
+
+    <string name="s_theme_accent">Vurgu rengi</string>
+    <string name="s_grid_density">Izgara yoğunluğu</string>
+    <string name="s_grid_compact">Sık</string>
+    <string name="s_grid_normal">Normal</string>
+    <string name="s_grid_large">Geniş</string>
+    <string name="s_language">Uygulama dili</string>
+    <string name="s_language_system">Sistem dili</string>
+    <string name="s_language_tr">Türkçe</string>
+    <string name="s_language_en">English</string>
+    <string name="s_force_tv_ui">TV arayüzünü zorla</string>
+    <string name="s_force_tv_ui_desc">Kumandayla kullanılan cihazlarda odak çerçeveli düzeni açar.</string>
+
+    <string name="s_parental_pin">PIN kodu</string>
+    <string name="s_parental_set">PIN belirle</string>
+    <string name="s_parental_change">PIN değiştir</string>
+    <string name="s_parental_remove">PIN kaldır</string>
+    <string name="s_parental_hide_adult">Yetişkin kategorilerini gizle</string>
+    <string name="s_parental_hide_adult_desc">Adı XXX / ADULT / +18 içeren kategoriler listede görünmez.</string>
+    <string name="s_parental_lock_adult">Yetişkin içerik için PIN sor</string>
+    <string name="s_pin_enter">PIN kodunu gir</string>
+    <string name="s_pin_new">Yeni PIN (4 hane)</string>
+    <string name="s_pin_repeat">PIN tekrar</string>
+    <string name="s_pin_wrong">PIN hatalı</string>
+    <string name="s_pin_mismatch">PIN kodları eşleşmiyor</string>
+    <string name="s_pin_saved">PIN kaydedildi</string>
+    <string name="s_pin_removed">PIN kaldırıldı</string>
+    <string name="s_pin_required">Bu bölüm PIN korumalı</string>
+
+    <string name="s_epg_source">EPG kaynağı</string>
+    <string name="s_epg_source_desc">Boş bırakılırsa panelin kendi xmltv.php adresi kullanılır.</string>
+    <string name="s_epg_days">Kaç günlük akış tutulsun</string>
+    <string name="s_epg_days_value">%1$d gün</string>
+    <string name="s_epg_auto">Açılışta EPG güncelle</string>
+    <string name="s_epg_last">Son güncelleme</string>
+    <string name="s_epg_never">Hiç güncellenmedi</string>
+
+    <string name="s_favorites_count">Favoriler</string>
+    <string name="s_history_count">İzleme geçmişi</string>
+    <string name="s_cache_size">Önbellek boyutu</string>
+    <string name="s_records">%1$d kayıt</string>
+    <string name="s_catalog_ttl">Listeyi ne sıklıkla yenile</string>
+    <string name="s_catalog_ttl_value">%1$d saat</string>
+    <string name="s_refresh_catalog">Kanal listesini şimdi yenile</string>
+    <string name="s_clear_cache">Önbelleği temizle</string>
+    <string name="s_cache_cleared">Önbellek temizlendi</string>
+
+    <string name="s_version">Sürüm</string>
+    <string name="s_about_note">Prizma IPTV · kişisel kullanım için</string>
+
+    <!-- Zaman -->
+    <string name="time_minutes">%1$d dk</string>
+    <string name="time_hours_minutes">%1$d sa %2$d dk</string>
+    <string name="time_just_now">az önce</string>
+    <string name="time_hours_ago">%1$d saat önce</string>
+    <string name="time_days_ago">%1$d gün önce</string>
+
+    <string name="login_host_required">Sunucu adresini gir.</string>
+    <string name="login_user_required">Kullanıcı adını gir.</string>
+    <string name="s_pin_short">PIN 4 haneli olmalı.</string>
+
+</resources>
