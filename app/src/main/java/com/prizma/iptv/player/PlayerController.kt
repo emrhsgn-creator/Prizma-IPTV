@@ -343,7 +343,7 @@ class PlayerController(
         }
     }
 
-    fun setLocked(value: Boolean) {
+    fun applyLock(value: Boolean) {
         locked = value
         controlsVisible = !value
         showNotice(
@@ -356,7 +356,7 @@ class PlayerController(
         player.playbackParameters = PlaybackParameters(value)
     }
 
-    fun setSpeedBoost(active: Boolean) {
+    fun applySpeedBoost(active: Boolean) {
         if (current?.isLive == true) return
         if (active == speedBoost) return
         speedBoost = active
@@ -369,17 +369,17 @@ class PlayerController(
         Settings.aspectMode = aspect
     }
 
-    fun setAspect(mode: AspectMode) {
+    fun applyAspectMode(mode: AspectMode) {
         aspect = mode
         Settings.aspectMode = mode
     }
 
-    fun setSubtitleScale(value: Float) {
+    fun applySubtitleScale(value: Float) {
         subtitleScale = value
         Settings.subtitleScale = value
     }
 
-    fun setSubtitleBackground(value: Boolean) {
+    fun applySubtitleBackground(value: Boolean) {
         subtitleBackground = value
         Settings.subtitleBackground = value
     }

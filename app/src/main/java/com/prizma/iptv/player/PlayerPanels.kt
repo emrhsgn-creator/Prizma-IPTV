@@ -255,7 +255,7 @@ fun PlayerSettingsPanel(
                     0.12f to R.string.player_size_huge
                 ).forEach { (value, labelRes) ->
                     Pill(stringResource(labelRes), controller.subtitleScale == value) {
-                        controller.setSubtitleScale(value)
+                        controller.applySubtitleScale(value)
                     }
                 }
             }
@@ -264,7 +264,7 @@ fun PlayerSettingsPanel(
                 Pill(
                     stringResource(R.string.player_subtitle_bg),
                     controller.subtitleBackground
-                ) { controller.setSubtitleBackground(!controller.subtitleBackground) }
+                ) { controller.applySubtitleBackground(!controller.subtitleBackground) }
             }
 
             // ---- Görüntü kalitesi ----
@@ -313,7 +313,7 @@ fun PlayerSettingsPanel(
                     AspectMode.STRETCH to R.string.player_aspect_stretch
                 ).forEach { (mode, labelRes) ->
                     Pill(stringResource(labelRes), controller.aspect == mode) {
-                        controller.setAspect(mode)
+                        controller.applyAspectMode(mode)
                     }
                 }
             }
@@ -322,11 +322,11 @@ fun PlayerSettingsPanel(
                 Pill(
                     stringResource(R.string.player_aspect_16_9),
                     controller.aspect == AspectMode.RATIO_16_9
-                ) { controller.setAspect(AspectMode.RATIO_16_9) }
+                ) { controller.applyAspectMode(AspectMode.RATIO_16_9) }
                 Pill(
                     stringResource(R.string.player_aspect_4_3),
                     controller.aspect == AspectMode.RATIO_4_3
-                ) { controller.setAspect(AspectMode.RATIO_4_3) }
+                ) { controller.applyAspectMode(AspectMode.RATIO_4_3) }
             }
 
             Spacer(Modifier.height(12.dp))

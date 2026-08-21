@@ -108,7 +108,7 @@ fun PlayerScreen(
         when {
             controller.showSettings -> controller.showSettings = false
             controller.showChannels -> controller.showChannels = false
-            controller.locked -> controller.setLocked(false)
+            controller.locked -> controller.applyLock(false)
             controller.controlsVisible && profile.isTv -> controller.controlsVisible = false
             else -> onExit()
         }
@@ -165,7 +165,7 @@ fun PlayerScreen(
                                 controller.revealControls()
                             },
                             onLongPress = {
-                                if (!controller.locked) controller.setSpeedBoost(true)
+                                if (!controller.locked) controller.applySpeedBoost(true)
                             }
                         )
                     }
@@ -174,7 +174,7 @@ fun PlayerScreen(
                         awaitEachGesture {
                             awaitFirstDown(requireUnconsumed = false)
                             waitForUpOrCancellation()
-                            controller.setSpeedBoost(false)
+                            controller.applySpeedBoost(false)
                         }
                     }
                     .pointerInput(controller.locked) {
@@ -344,7 +344,7 @@ fun PlayerScreen(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(14.dp)
-            ) { controller.setLocked(false) }
+            ) { controller.applyLock(false) }
             return@Box
         }
 
@@ -367,7 +367,7 @@ fun PlayerScreen(
             ) {
                 GlyphButton("‹", fontSize = 24.sp, onClick = onExit)
                 Spacer(Modifier.width(8.dp))
-                GlyphButton("🔒", fontSize = 14.sp) { controller.setLocked(true) }
+                GlyphButton("🔒", fontSize = 14.sp) { controller.applyLock(true) }
 
                 Column(
                     Modifier
