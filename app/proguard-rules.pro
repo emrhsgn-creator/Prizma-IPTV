@@ -24,6 +24,11 @@
 # Coil
 -dontwarn coil.**
 
+# ViewModel'ler yansima ile ornekleniyor; yapicilari korunmali.
+-keepclassmembers class * extends androidx.lifecycle.ViewModel {
+    <init>(...);
+}
+
 # Uygulama modelleri (org.json ile elle serileştiriliyor, yine de güvenli taraf)
 -keep class com.prizma.iptv.data.model.** { *; }
 
