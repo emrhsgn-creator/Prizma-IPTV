@@ -82,8 +82,8 @@ fun CatalogTab(state: HomeState, data: HomeData, section: Section) {
         return
     }
 
-    val allItems = state.visibleItems(sectionData)
-    val categories = state.visibleCategories(sectionData)
+    val allItems = remember(sectionData) { state.visibleItems(sectionData) }
+    val categories = remember(sectionData) { state.visibleCategories(sectionData) }
     val favorites = data.favorites.filter { it.section == section.name }
     val selected = state.selectedCategory(section)
     val query = if (state.searchActive) state.query.trim() else ""

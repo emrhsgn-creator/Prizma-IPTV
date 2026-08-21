@@ -70,9 +70,10 @@ fun DashboardTab(state: HomeState, data: HomeData) {
     val liveFavorites = data.favorites.filter { it.section == Section.LIVE.name }
     val vodFavorites = data.favorites.filter { it.section != Section.LIVE.name }
 
-    val movies = state.visibleItems(data.section(Section.VOD))
-    val series = state.visibleItems(data.section(Section.SERIES))
-    val channels = state.visibleItems(data.section(Section.LIVE))
+    // On binlerce ogeli kataloglarda suzme her bestelemede tekrarlanmasin.
+    val movies = remember(data.sections) { state.visibleItems(data.section(Section.VOD)) }
+    val series = remember(data.sections) { state.visibleItems(data.section(Section.SERIES)) }
+    val channels = remember(data.sections) { state.visibleItems(data.section(Section.LIVE)) }
 
     // Şu an yayında bilgisi EPG sürümüne bağlı; raf içinde hesaplanırsa
     // liste yeniden bestelenmediği için bayat kalıyor.
