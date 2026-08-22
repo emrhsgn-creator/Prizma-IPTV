@@ -89,6 +89,8 @@ fun DashboardTab(state: HomeState, data: HomeData) {
         }
     }
 
+    val favoriteChannels = liveFavoriteRows.map { it.channel }
+
     val empty = continueWatching.isEmpty() && data.favorites.isEmpty() &&
         data.history.isEmpty() && movies.isEmpty() && series.isEmpty() && channels.isEmpty()
 
@@ -130,11 +132,8 @@ fun DashboardTab(state: HomeState, data: HomeData) {
                         wide = true,
                         subtitle = row.nowTitle,
                         onClick = {
-                            Launch.openLive(
-                                ctx, session,
-                                channels.ifEmpty { listOf(row.channel) },
-                                row.channel
-                            )
+                            // Favori rafindan acilan kanal favoriler icinde ilerler.
+                            Launch.openLive(ctx, session, favoriteChannels, row.channel)
                         }
                     )
                 }

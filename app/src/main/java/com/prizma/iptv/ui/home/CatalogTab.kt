@@ -105,7 +105,6 @@ fun CatalogTab(state: HomeState, data: HomeData, section: Section) {
                     data = data,
                     section = section,
                     items = tiles,
-                    allChannels = allItems,
                     showReorder = selected == CATEGORY_FAVORITES &&
                         state.sortMode == SortMode.DEFAULT
                 )
@@ -329,13 +328,19 @@ private fun CategoryStrip(
     }
 }
 
+/**
+ * Bir bolumun icerik izgarasi.
+ *
+ * Oynatma sirasi [items] listesinin kendisidir: kullanici hangi kategoriyi
+ * geziyorsa oynaticida da o kategoride kalir. Favorilerden acilan bir kanal
+ * yalnizca favoriler arasinda ilerler.
+ */
 @Composable
 fun ItemGrid(
     state: HomeState,
     data: HomeData,
     section: Section,
     items: List<StreamItem>,
-    allChannels: List<StreamItem>,
     showReorder: Boolean
 ) {
     val ctx = LocalContext.current
@@ -377,7 +382,7 @@ fun ItemGrid(
                         stringResource(R.string.player_catchup)
                     } else "",
                     onClick = {
-                        Launch.open(ctx, session, section, item, allChannels)
+                        Launch.open(ctx, session, section, item, items)
                     },
                     onLongClick = { state.contextItem = section to item }
                 )

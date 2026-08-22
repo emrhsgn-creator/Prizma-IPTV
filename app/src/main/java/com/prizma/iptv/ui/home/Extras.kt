@@ -100,10 +100,9 @@ fun SearchTab(state: HomeState, data: HomeData) {
                     wide = section == Section.LIVE,
                     rating = item.rating,
                     onClick = {
-                        Launch.open(
-                            ctx, session, section, item,
-                            state.visibleItems(data.section(section))
-                        )
+                        // Arama sonuclarindan acilan kanal, sonuc listesi
+                        // icinde ilerler.
+                        Launch.open(ctx, session, section, item, list)
                     },
                     onLongClick = { state.contextItem = section to item }
                 )
