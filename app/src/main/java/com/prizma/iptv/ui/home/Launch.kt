@@ -42,9 +42,19 @@ object Launch {
         channels: List<StreamItem>,
         picked: StreamItem
     ) {
-        val items = channels.map { session.liveItem(it) }
-        val index = channels.indexOfFirst { it.id == picked.id }.coerceAtLeast(0)
-        Settings.lastLiveItem = items.getOrNull(index)?.toJson().orEmpty()
+        val found = channels.indexOfFirst { it.id == picked.id }
+        // Secilen kanal listede yoksa sessizce ilk kanali acmak yerine
+        // yalnizca o kanali oynat; yanlis yayin acilmasi en kotu sonuc.
+        val items: List<PlayItem>
+        val index: Int
+        if (found >= 0) {
+            items = channels.map { session.liveItem(it) }
+            index = found
+        } else {
+            items = listOf(session.liveItem(picked))
+            index = 0
+        }
+        Settings.lastLiveItem = items[index].toJson()
         PlayerActivity.start(ctx, items, index)
     }
 
@@ -52,8 +62,19 @@ object Launch {
         PlayerActivity.start(ctx, listOf(item), 0)
     }
 
-    /** Geçmiş / "devam et" kaydından yeniden açma. */
-    fun openWatchState(ctx: Context, session: Session, state: WatchState) {
+    /**
+     * Geçmiş kaydından yeniden açma.
+     *
+     * [direct] verildiğinde ("Devam Et" rafı) detay ekranı atlanır ve
+     * içerik kaldığı yerden doğrudan oynatılır.
+     */
+    fun openWatchState(
+        ctx: Context,
+        session: Session,
+        state: WatchState,
+        direct: Boolean = false
+    ) {
+        if (direct && resumeDirectly(ctx, session, state)) return
         when (state.section) {
             Section.LIVE.name -> {
                 val channel = session.catalog.get(Section.LIVE)?.items
@@ -80,6 +101,19 @@ object Launch {
             Section.SERIES.name ->
                 SeriesActivity.start(ctx, state.id, state.name, state.icon)
         }
+    }
+
+    /** Film ve dizi bölümlerini detay ekranına uğramadan oynatır. */
+    private fun resumeDirectly(ctx: Context, session: Session, state: WatchState): Boolean {
+        val item = when (state.section) {
+            Section.VOD.name -> session.movieItem(
+                state.id, state.name, state.icon, state.extension
+            )
+            PlayItem.EPISODE_SECTION -> session.episodeItemFromHistory(state)
+            else -> null
+        } ?: return false
+        PlayerActivity.start(ctx, listOf(item), 0)
+        return true
     }
 
     @Volatile

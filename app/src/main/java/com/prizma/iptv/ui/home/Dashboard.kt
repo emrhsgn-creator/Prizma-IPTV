@@ -111,7 +111,10 @@ fun DashboardTab(state: HomeState, data: HomeData) {
                         icon = watch.icon,
                         wide = wide,
                         progress = watch.progress,
-                        onClick = { Launch.openWatchState(ctx, session, watch) }
+                        onClick = {
+                            // "Devam Et" detaya ugramadan kaldigi yerden oynatir.
+                            Launch.openWatchState(ctx, session, watch, direct = true)
+                        }
                     )
                 }
             }

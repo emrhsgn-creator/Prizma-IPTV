@@ -78,6 +78,9 @@ class FavoritesStore(private val profileId: String) {
     }
 
     /** Aynı bölümdeki komşu favori ile yer değiştirir. */
+    /** Yedekten geri yükleme için listenin tamamını değiştirir. */
+    fun replaceAll(list: List<SavedItem>) = persist(list)
+
     fun move(section: String, id: String, delta: Int) {
         val all = _items.value.toMutableList()
         val indices = all.indices.filter { all[it].section == section }
@@ -177,6 +180,9 @@ class HistoryStore(private val profileId: String) {
         val existing = find(section, id) ?: return
         record(existing.copy(position = 0L))
     }
+
+    /** Yedekten geri yükleme için listenin tamamını değiştirir. */
+    fun replaceAll(list: List<WatchState>) = persist(list)
 
     fun remove(section: String, id: String) =
         persist(_items.value.filterNot { it.section == section && it.id == id })

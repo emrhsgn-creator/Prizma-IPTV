@@ -330,4 +330,12 @@
     <string name="player_add_favorite">Favorilere ekle</string>
     <string name="player_remove_favorite">Favorilerden çıkar</string>
 
+    <string name="player_search_channel">Kanal ara…</string>
+    <string name="player_external">Başka oynatıcıda aç</string>
+    <string name="s_backup">Yedekle</string>
+    <string name="s_restore">Geri yükle</string>
+    <string name="s_backup_ok">Yedek kaydedildi</string>
+    <string name="s_restore_ok">Yedek geri yüklendi</string>
+    <string name="s_restore_failed">Yedek okunamadı</string>
+
 </resources>

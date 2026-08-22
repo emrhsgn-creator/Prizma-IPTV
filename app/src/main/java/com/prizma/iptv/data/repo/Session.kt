@@ -18,6 +18,7 @@ import com.prizma.iptv.data.model.Section
 import com.prizma.iptv.data.model.ServerInfo
 import com.prizma.iptv.data.model.SourceType
 import com.prizma.iptv.data.model.StreamItem
+import com.prizma.iptv.data.model.WatchState
 import com.prizma.iptv.data.remote.XtreamApi
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -115,6 +116,24 @@ class Session(val profile: Profile) {
             extension = episode.extension,
             parentId = seriesId
         )
+
+    /**
+     * Geçmiş kaydından bölümü yeniden kurar. Dizi bilgisini yeniden çekmeye
+     * gerek yok: bölüm kimliği ve uzantısı adres için yeterli.
+     */
+    fun episodeItemFromHistory(state: WatchState): PlayItem? {
+        if (state.id.isBlank()) return null
+        val ext = state.extension.ifBlank { "mp4" }
+        return PlayItem(
+            kind = PlayKind.EPISODE,
+            id = state.id,
+            title = state.name,
+            url = XtreamApi.episodeUrl(profile, state.id, ext),
+            icon = state.icon,
+            extension = ext,
+            parentId = state.parentId
+        )
+    }
 
     /**
      * Geçmişe dönük (catch-up) oynatma. Kanalın arşiv penceresi dışındaki

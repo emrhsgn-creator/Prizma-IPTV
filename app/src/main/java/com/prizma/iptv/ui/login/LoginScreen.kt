@@ -33,6 +33,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -70,6 +72,12 @@ fun LoginScreen(
     val tint = accent()
     val draft = state.draft
     var advanced by remember { mutableStateOf(false) }
+
+    val hostFocus = remember { FocusRequester() }
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(250)
+        runCatching { hostFocus.requestFocus() }
+    }
 
     Surface(color = Ink.Bg, modifier = Modifier.fillMaxSize()) {
         Column(
@@ -128,7 +136,7 @@ fun LoginScreen(
                     if (isXtream) R.string.login_host_hint else R.string.login_m3u_hint
                 ),
                 keyboardType = KeyboardType.Uri,
-                modifier = fieldWidth
+                modifier = fieldWidth.focusRequester(hostFocus)
             )
 
             if (isXtream) {

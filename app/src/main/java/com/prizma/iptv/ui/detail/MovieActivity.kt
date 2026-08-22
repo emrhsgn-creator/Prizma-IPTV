@@ -38,6 +38,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -118,6 +120,13 @@ private fun MovieScreen(
 ) {
     val ctx = LocalContext.current
     val tint = accent()
+
+    // Kumandada ekran acilir acilmaz odagin oynat dugmesine oturmasi gerekiyor.
+    val playFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(200)
+        runCatching { playFocus.requestFocus() }
+    }
 
     var info by remember(vodId) { mutableStateOf<VodInfo?>(null) }
     var loading by remember(vodId) { mutableStateOf(true) }
@@ -237,7 +246,7 @@ private fun MovieScreen(
                             if (resumeMs > 0L) R.string.detail_resume else R.string.detail_play
                         ),
                         leading = "▶",
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.weight(1f).focusRequester(playFocus),
                         onClick = { play(fromStart = false) }
                     )
                     if (resumeMs > 0L) {

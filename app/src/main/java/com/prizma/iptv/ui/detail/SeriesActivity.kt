@@ -40,6 +40,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -122,6 +124,8 @@ private fun SeriesScreen(
 ) {
     val ctx = LocalContext.current
     val tint = accent()
+
+    val playFocus = remember { FocusRequester() }
 
     var info by remember(seriesId) { mutableStateOf<SeriesInfo?>(null) }
     var error by remember(seriesId) { mutableStateOf<Throwable?>(null) }
@@ -234,6 +238,13 @@ private fun SeriesScreen(
                         }.coerceAtLeast(0)
                     }
 
+                    LaunchedEffect(episodes.isNotEmpty()) {
+                        if (episodes.isNotEmpty()) {
+                            kotlinx.coroutines.delay(200)
+                            runCatching { playFocus.requestFocus() }
+                        }
+                    }
+
                     LazyColumn(
                         Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(bottom = 28.dp)
@@ -255,6 +266,7 @@ private fun SeriesScreen(
                                         else R.string.detail_play_all
                                     ),
                                     leading = "▶",
+                                    modifier = Modifier.focusRequester(playFocus),
                                     onClick = { playFrom(episodes, nextIndex) }
                                 )
                             }

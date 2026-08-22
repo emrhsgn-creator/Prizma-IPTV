@@ -1,5 +1,8 @@
 package com.prizma.iptv.ui.settings
 
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -29,6 +32,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -46,6 +50,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.prizma.iptv.BuildConfig
 import com.prizma.iptv.R
 import com.prizma.iptv.core.Fmt
+import com.prizma.iptv.data.local.Backup
 import com.prizma.iptv.data.local.DecoderMode
 import com.prizma.iptv.data.local.GridDensity
 import com.prizma.iptv.data.local.Paths
@@ -63,6 +68,9 @@ import com.prizma.iptv.ui.home.HomeState
 import com.prizma.iptv.ui.theme.AccentChoices
 import com.prizma.iptv.ui.theme.Ink
 import com.prizma.iptv.ui.theme.accent
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun SettingsScreen(
@@ -86,6 +94,61 @@ fun SettingsScreen(
     val epgProgress by session.epg.progress.collectAsStateWithLifecycle()
 
     var pinDialog by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    // Favori sırası kullanıcının elle kurduğu tek veri; cihaz değişiminde
+    // kaybolmaması için dosyaya alınabiliyor.
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val ok = withContext(Dispatchers.IO) {
+                runCatching {
+                    val payload = Backup.export(
+                        session.favorites.items.value,
+                        session.history.items.value
+                    )
+                    ctx.contentResolver.openOutputStream(uri)?.use { out ->
+                        out.write(payload.toByteArray(Charsets.UTF_8))
+                    } ?: error("stream")
+                }.isSuccess
+            }
+            Toast.makeText(
+                ctx,
+                ctx.getString(if (ok) R.string.s_backup_ok else R.string.s_restore_failed),
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val restored = withContext(Dispatchers.IO) {
+                runCatching {
+                    val raw = ctx.contentResolver.openInputStream(uri)
+                        ?.bufferedReader(Charsets.UTF_8)
+                        ?.use { it.readText() }
+                        .orEmpty()
+                    Backup.parse(raw)
+                }.getOrNull()
+            }
+            if (restored == null) {
+                Toast.makeText(
+                    ctx, ctx.getString(R.string.s_restore_failed), Toast.LENGTH_SHORT
+                ).show()
+            } else {
+                session.favorites.replaceAll(restored.favorites)
+                session.history.replaceAll(restored.history)
+                Toast.makeText(
+                    ctx, ctx.getString(R.string.s_restore_ok), Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
+    }
 
     val cacheSize = remember(revision, favorites, history) { Paths.totalSize() }
 
@@ -436,6 +499,16 @@ fun SettingsScreen(
                         stringResource(R.string.s_catalog_ttl_value, hours),
                         Settings.catalogTtlHours == hours
                     ) { Settings.catalogTtlHours = hours }
+                }
+            }
+
+            Spacer(Modifier.height(12.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Pill(stringResource(R.string.s_backup), false) {
+                    exportLauncher.launch(Backup.suggestedFileName())
+                }
+                Pill(stringResource(R.string.s_restore), false) {
+                    importLauncher.launch(arrayOf("application/json", "text/plain", "*/*"))
                 }
             }
 

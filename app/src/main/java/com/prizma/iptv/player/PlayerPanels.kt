@@ -14,7 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -22,6 +22,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -34,6 +36,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -47,6 +50,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import com.prizma.iptv.R
 import com.prizma.iptv.core.Fmt
 import com.prizma.iptv.data.local.AspectMode
+import com.prizma.iptv.data.model.PlayItem
 import com.prizma.iptv.data.model.SavedItem
 import com.prizma.iptv.ui.common.Pill
 import com.prizma.iptv.ui.common.ProgressStrip
@@ -67,9 +71,23 @@ fun ChannelPanel(controller: PlayerController, onDismiss: () -> Unit) {
     val live = controller.current?.isLive == true
     val now = System.currentTimeMillis()
 
+    var query by remember { mutableStateOf("") }
+
+    // Binlerce kanalda gezinmek yerine ada gore suzme. Gercek sira numarasi
+    // korunur; suzulmus listeden secim yapinca dogru kanal acilir.
+    val rows = remember(query, controller.items) {
+        val all = controller.items.withIndex().toList()
+        if (query.isBlank()) all
+        else all.filter { it.value.title.contains(query.trim(), ignoreCase = true) }
+    }
+
     LaunchedEffect(Unit) {
         listState.scrollToItem((controller.currentIndex - 3).coerceAtLeast(0))
         runCatching { focusRequester.requestFocus() }
+    }
+
+    LaunchedEffect(query) {
+        if (query.isNotBlank()) runCatching { listState.scrollToItem(0) }
     }
 
     Box(
@@ -103,14 +121,37 @@ fun ChannelPanel(controller: PlayerController, onDismiss: () -> Unit) {
                     modifier = Modifier.weight(1f)
                 )
                 Text(
-                    controller.items.size.toString(),
+                    rows.size.toString(),
                     color = Ink.TextMuted,
                     fontSize = 11.sp
                 )
             }
 
+            TextField(
+                value = query,
+                onValueChange = { query = it },
+                placeholder = {
+                    Text(stringResource(R.string.player_search_channel), fontSize = 12.sp)
+                },
+                singleLine = true,
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor = Ink.Surface,
+                    unfocusedContainerColor = Ink.Surface,
+                    focusedTextColor = Ink.TextPrimary,
+                    unfocusedTextColor = Ink.TextPrimary,
+                    focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent,
+                    cursorColor = tint
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 10.dp, vertical = 6.dp)
+            )
+
             LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
-                itemsIndexed(controller.items, key = { _, item -> item.id + item.url }) { index, item ->
+                items(rows, key = { it.value.id + it.value.url }) { row ->
+                    val index = row.index
+                    val item = row.value
                     val playingNow = index == controller.currentIndex
                     val program = if (live) {
                         controller.session?.epg
@@ -189,6 +230,7 @@ fun PlayerSettingsPanel(
     }
     val favorites by favoritesFlow.collectAsStateWithLifecycle()
 
+    val panelContext = LocalContext.current
     val firstFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) {
         delay(150)
@@ -416,6 +458,13 @@ fun PlayerSettingsPanel(
                 }
             }
 
+            // ---- Harici oynatici ----
+            // Sorunlu akislarda kacis yolu: adresi baska bir oynaticiya devret.
+            Spacer(Modifier.height(16.dp))
+            Pill(stringResource(R.string.player_external), false) {
+                controller.current?.let { openExternally(panelContext, it) }
+            }
+
             Spacer(Modifier.height(24.dp))
             Text(
                 stringResource(R.string.player_hint_dpad),
@@ -492,6 +541,21 @@ fun StatsOverlay(controller: PlayerController, modifier: Modifier = Modifier) {
                 Text(value, color = Color.White, fontSize = 10.sp, maxLines = 2)
             }
         }
+    }
+}
+
+/** Oynatilan adresi cihazdaki baska bir video oynaticiya devreder. */
+private fun openExternally(context: android.content.Context, item: PlayItem) {
+    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+        setDataAndType(android.net.Uri.parse(item.url), "video/*")
+        putExtra("title", item.title)
+        addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+    runCatching {
+        context.startActivity(
+            android.content.Intent.createChooser(intent, item.title)
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        )
     }
 }
 

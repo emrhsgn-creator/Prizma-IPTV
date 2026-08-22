@@ -82,8 +82,15 @@ object Tsv {
 
     data class Data(val version: Int, val savedAt: Long, val rows: List<Array<String>>)
 
-    /** Önce geçici dosyaya yazıp yeniden adlandırır; yarım kalmış dosya oluşmaz. */
-    fun write(file: File, version: Int, lines: List<String>) {
+    private val writeLock = Any()
+
+    /**
+     * Önce geçici dosyaya yazıp yeniden adlandırır; yarım kalmış dosya oluşmaz.
+     *
+     * Yazımlar tek tek sıraya sokulur: favori sırasını hızlıca değiştirirken
+     * iki yazım aynı geçici dosyayı paylaşıp birbirini bozabiliyordu.
+     */
+    fun write(file: File, version: Int, lines: List<String>) = synchronized(writeLock) {
         val tmp = File(file.parentFile, file.name + ".tmp")
         runCatching {
             tmp.bufferedWriter(Charsets.UTF_8).use { w ->

@@ -316,4 +316,12 @@
     <string name="player_add_favorite">Add to favorites</string>
     <string name="player_remove_favorite">Remove from favorites</string>
 
+    <string name="player_search_channel">Search channels…</string>
+    <string name="player_external">Open in another player</string>
+    <string name="s_backup">Back up</string>
+    <string name="s_restore">Restore</string>
+    <string name="s_backup_ok">Backup saved</string>
+    <string name="s_restore_ok">Backup restored</string>
+    <string name="s_restore_failed">Could not read the backup</string>
+
 </resources>
