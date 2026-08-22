@@ -32,8 +32,8 @@ android {
         applicationId = "com.prizma.iptv"
         minSdk = 21
         targetSdk = 35
-        versionCode = 6
-        versionName = "2.0.3"
+        versionCode = 7
+        versionName = "2.0.4"
 
         // Tek APK uretilir; dort mimariyi de icerir ve her cihaza kurulur.
         // ABI'ye gore bolmek elden kurulumda fayda saglamiyordu.

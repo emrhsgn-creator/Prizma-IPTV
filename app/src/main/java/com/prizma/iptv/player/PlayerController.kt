@@ -107,30 +107,48 @@ class PlayerController(
     private var noticeJob: Job? = null
     private var triedAlternate = false
 
+    /** Kuyruk kurulumu surerken oynatici olaylari yok sayilir. */
+    private var applyingQueue = false
+
     // ------------------------------------------------------------------ kuyruk
 
+    /**
+     * Kuyrugu kurar ve istenen sirada oynatmaya baslar.
+     *
+     * Hedef sira yerel bir degiskende tutulur: setMediaItems cagrisi daha
+     * seekTo calismadan onMediaItemTransition olayini tetikliyor ve o sirada
+     * oynaticinin sirasi henuz 0. Dinleyici alani gunceller, ardindan
+     * seekTo o degeri okursa her zaman ilk oge acilir.
+     */
     fun setQueue(queue: List<PlayItem>, startIndex: Int, forceRestart: Boolean) {
         if (queue.isEmpty()) {
             onExit()
             return
         }
+        val target = startIndex.coerceIn(0, queue.lastIndex)
         items = queue
-        currentIndex = startIndex.coerceIn(0, queue.lastIndex)
+        currentIndex = target
         previousIndex = -1
         triedAlternate = false
 
-        val start = queue[currentIndex]
+        val start = queue[target]
         val resumeMs = if (!forceRestart && start.resumable) {
             session?.history?.resumePosition(start.sectionKey(), start.id) ?: 0L
         } else 0L
 
-        player.setMediaItems(queue.map(PlayerEngine::mediaItemOf))
-        player.repeatMode =
-            if (!Settings.autoNext && !start.isLive) Player.REPEAT_MODE_ONE
-            else Player.REPEAT_MODE_OFF
-        player.seekTo(currentIndex, if (resumeMs > 0L) resumeMs else C.TIME_UNSET)
-        player.playWhenReady = true
-        player.prepare()
+        applyingQueue = true
+        try {
+            player.setMediaItems(queue.map(PlayerEngine::mediaItemOf))
+            player.repeatMode =
+                if (!Settings.autoNext && !start.isLive) Player.REPEAT_MODE_ONE
+                else Player.REPEAT_MODE_OFF
+            player.seekTo(target, if (resumeMs > 0L) resumeMs else C.TIME_UNSET)
+            player.playWhenReady = true
+            player.prepare()
+        } finally {
+            applyingQueue = false
+        }
+        currentIndex = target
 
         if (resumeMs > 0L) showNotice(context.getString(R.string.player_resume_notice))
         rememberLastLive()
@@ -219,6 +237,9 @@ class PlayerController(
         }
 
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+            // Kuyruk kurulurken gelen olaylar henuz hedef siraya gecilmedigi
+            // icin yanlis deger tasir; kurulum bitince zaten guncelleniyor.
+            if (applyingQueue) return
             val index = player.currentMediaItemIndex
             if (index != currentIndex) {
                 previousIndex = currentIndex
