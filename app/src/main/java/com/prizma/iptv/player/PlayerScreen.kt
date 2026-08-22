@@ -99,6 +99,14 @@ fun PlayerScreen(
 
     // Kumandada cubuk acilinca odagin bir dugmeye oturmasi gerekiyor,
     // yoksa yon tuslari hicbir yere gitmiyor.
+    // Panel acildiginda kontrol cubugu kapanir; aksi halde odak arkadaki
+    // gorunmeyen dugmelerde kalip yon tuslari bosa gidiyor.
+    LaunchedEffect(controller.showSettings, controller.showChannels) {
+        if (controller.showSettings || controller.showChannels) {
+            controller.controlsVisible = false
+        }
+    }
+
     val playFocus = remember { FocusRequester() }
     LaunchedEffect(controller.controlsVisible, controller.locked) {
         if (controller.controlsVisible && !controller.locked && profile.isTv) {

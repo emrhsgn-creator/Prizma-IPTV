@@ -375,18 +375,90 @@ fun ItemGrid(
                     badge = if (live && item.hasArchive) {
                         stringResource(R.string.player_catchup)
                     } else "",
-                    favorite = favoriteIds.contains(item.id),
                     onClick = {
                         Launch.open(ctx, session, section, item, allChannels)
                     },
                     onLongClick = { state.contextItem = section to item }
                 )
+
+                // Kumandada uzun basmak guvenilir calismadigi icin favori
+                // islemi her kutucugun altinda ayri bir dugme olarak duruyor.
+                FavoriteRow(
+                    favorite = favoriteIds.contains(item.id),
+                    showGuide = live,
+                    onToggle = {
+                        session.favorites.toggle(session.favoriteOf(section, item))
+                    },
+                    onGuide = { state.epgDialogItem = item }
+                )
+
                 if (showReorder) {
                     ReorderRow(
                         onLeft = { session.favorites.move(section.name, item.id, -1) },
                         onRight = { session.favorites.move(section.name, item.id, 1) }
                     )
                 }
+            }
+        }
+    }
+}
+
+/** Kutucuk altindaki favori (ve canli kanallarda yayin akisi) dugmesi. */
+@Composable
+private fun FavoriteRow(
+    favorite: Boolean,
+    showGuide: Boolean,
+    onToggle: () -> Unit,
+    onGuide: () -> Unit
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(top = 5.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Row(
+            Modifier
+                .weight(1f)
+                .focusHighlight(RoundedCornerShape(6.dp))
+                .clip(RoundedCornerShape(6.dp))
+                .background(if (favorite) Ink.Gold.copy(alpha = 0.20f) else Ink.Surface)
+                .clickable(onClick = onToggle)
+                .padding(vertical = 6.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                "★",
+                color = if (favorite) Ink.Gold else Ink.TextMuted,
+                fontSize = 11.sp
+            )
+            Spacer(Modifier.width(5.dp))
+            Text(
+                stringResource(if (favorite) R.string.favorited else R.string.favorite),
+                color = if (favorite) Ink.Gold else Ink.TextMuted,
+                fontSize = 10.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+
+        if (showGuide) {
+            Box(
+                Modifier
+                    .focusHighlight(RoundedCornerShape(6.dp))
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(Ink.Surface)
+                    .clickable(onClick = onGuide)
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    "i",
+                    color = Ink.TextMuted,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold
+                )
             }
         }
     }

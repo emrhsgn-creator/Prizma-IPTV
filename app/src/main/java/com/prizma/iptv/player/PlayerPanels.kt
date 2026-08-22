@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.media3.common.C
 import androidx.media3.common.util.UnstableApi
+import kotlinx.coroutines.delay
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.flow.MutableStateFlow
 import com.prizma.iptv.R
@@ -188,6 +189,12 @@ fun PlayerSettingsPanel(
     }
     val favorites by favoritesFlow.collectAsStateWithLifecycle()
 
+    val firstFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        delay(150)
+        runCatching { firstFocus.requestFocus() }
+    }
+
     val audioTracks = remember(tracks) {
         tracks?.let { collectTracks(it, C.TRACK_TYPE_AUDIO) }.orEmpty()
     }
@@ -215,12 +222,24 @@ fun PlayerSettingsPanel(
                 .verticalScroll(rememberScrollState())
                 .padding(18.dp)
         ) {
-            Text(
-                stringResource(R.string.player_settings),
-                color = Ink.TextPrimary,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold
-            )
+            // Kumandada panel acilinca odagin tutunacagi ilk oge.
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    stringResource(R.string.player_settings),
+                    color = Ink.TextPrimary,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f)
+                )
+                Pill(
+                    stringResource(R.string.close),
+                    false,
+                    Modifier.focusRequester(firstFocus)
+                ) { onDismiss() }
+            }
             Spacer(Modifier.height(16.dp))
 
             // ---- Favori ----
