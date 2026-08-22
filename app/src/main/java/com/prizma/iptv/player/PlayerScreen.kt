@@ -40,6 +40,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -94,6 +96,16 @@ fun PlayerScreen(
     var duration by remember { mutableLongStateOf(0L) }
     var buffered by remember { mutableLongStateOf(0L) }
     var scrub by remember { mutableStateOf<Float?>(null) }
+
+    // Kumandada cubuk acilinca odagin bir dugmeye oturmasi gerekiyor,
+    // yoksa yon tuslari hicbir yere gitmiyor.
+    val playFocus = remember { FocusRequester() }
+    LaunchedEffect(controller.controlsVisible, controller.locked) {
+        if (controller.controlsVisible && !controller.locked && profile.isTv) {
+            delay(150)
+            runCatching { playFocus.requestFocus() }
+        }
+    }
 
     LaunchedEffect(controller.currentIndex) {
         while (true) {
@@ -491,6 +503,7 @@ fun PlayerScreen(
                     }
                     GlyphButton(
                         if (controller.playing) "⏸" else "▶",
+                        modifier = Modifier.focusRequester(playFocus),
                         size = 52.dp,
                         fontSize = 20.sp
                     ) {

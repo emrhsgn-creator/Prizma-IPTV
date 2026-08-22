@@ -41,9 +41,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.media3.common.C
 import androidx.media3.common.util.UnstableApi
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.flow.MutableStateFlow
 import com.prizma.iptv.R
 import com.prizma.iptv.core.Fmt
 import com.prizma.iptv.data.local.AspectMode
+import com.prizma.iptv.data.model.SavedItem
 import com.prizma.iptv.ui.common.Pill
 import com.prizma.iptv.ui.common.ProgressStrip
 import com.prizma.iptv.ui.common.focusHighlight
@@ -180,6 +183,11 @@ fun PlayerSettingsPanel(
     val tracks = controller.tracks
     val live = controller.current?.isLive == true
 
+    val favoritesFlow = remember(controller.session) {
+        controller.session?.favorites?.items ?: MutableStateFlow(emptyList<SavedItem>())
+    }
+    val favorites by favoritesFlow.collectAsStateWithLifecycle()
+
     val audioTracks = remember(tracks) {
         tracks?.let { collectTracks(it, C.TRACK_TYPE_AUDIO) }.orEmpty()
     }
@@ -214,6 +222,25 @@ fun PlayerSettingsPanel(
                 fontWeight = FontWeight.Bold
             )
             Spacer(Modifier.height(16.dp))
+
+            // ---- Favori ----
+            // Kumandada uzun basmak guvenilir degil; favori islemi buradan
+            // dogrudan erisilebilir olmali.
+            val favoriteTarget = controller.currentFavoriteItem()
+            if (favoriteTarget != null) {
+                val isFavorite = favorites.any {
+                    it.section == favoriteTarget.section && it.id == favoriteTarget.id
+                }
+                GroupTitle(stringResource(R.string.favorite))
+                Pill(
+                    stringResource(
+                        if (isFavorite) R.string.player_remove_favorite
+                        else R.string.player_add_favorite
+                    ),
+                    isFavorite
+                ) { controller.toggleCurrentFavorite() }
+                Spacer(Modifier.height(16.dp))
+            }
 
             // ---- Ses ----
             GroupTitle(stringResource(R.string.player_audio))

@@ -2,6 +2,7 @@ package com.prizma.iptv
 
 import android.content.Context
 import android.os.Bundle
+import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,6 +17,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.prizma.iptv.core.LocaleHelper
 import com.prizma.iptv.data.model.Section
 import com.prizma.iptv.ui.common.LoadingBox
+import com.prizma.iptv.ui.home.HomeBus
 import com.prizma.iptv.ui.home.HomeScreen
 import com.prizma.iptv.ui.home.Launch
 import com.prizma.iptv.ui.login.LoginScreen
@@ -29,6 +31,15 @@ class MainActivity : ComponentActivity() {
 
     override fun attachBaseContext(newBase: Context) {
         super.attachBaseContext(LocaleHelper.wrap(newBase))
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.action == KeyEvent.ACTION_DOWN &&
+            HomeBus.onKey?.invoke(event.keyCode) == true
+        ) {
+            return true
+        }
+        return super.dispatchKeyEvent(event)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

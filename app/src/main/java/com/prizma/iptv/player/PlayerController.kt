@@ -25,6 +25,7 @@ import com.prizma.iptv.data.local.AspectMode
 import com.prizma.iptv.data.local.Settings
 import com.prizma.iptv.data.model.PlayItem
 import com.prizma.iptv.data.model.PlayKind
+import com.prizma.iptv.data.model.SavedItem
 import com.prizma.iptv.data.model.WatchState
 import com.prizma.iptv.data.repo.Session
 import kotlinx.coroutines.CoroutineScope
@@ -505,12 +506,19 @@ class PlayerController(
 
     // ------------------------------------------------------------------ kumanda
 
-    /** true dönerse tuş burada tüketilmiştir. */
+    /**
+     * Kumanda tusu isleme. true donerse tus burada tuketilmistir.
+     *
+     * Kontrol cubugu acikken yon tuslari ekrandaki dugmeler arasinda
+     * gezinmeli; kanal degistirme ve sarma kisayollari yalnizca cubuk
+     * kapaliyken devreye girer. Aksi halde kullanici ust bardaki dugmelere
+     * kumandayla ulasamiyor.
+     */
     fun handleKey(keyCode: Int): Boolean {
         if (showSettings || showChannels) return false
 
         if (locked) {
-            // Kilitliyken yalnızca geri tuşu geçer.
+            // Kilitliyken yalnizca geri tusu gecer.
             return keyCode != KeyEvent.KEYCODE_BACK
         }
 
@@ -520,29 +528,48 @@ class PlayerController(
             return true
         }
 
+        val navigating = controlsVisible
         val live = current?.isLive == true
 
         return when (keyCode) {
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
-                toggleControls()
-                true
+                if (navigating) {
+                    false
+                } else {
+                    revealControls()
+                    true
+                }
             }
 
-            KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_CHANNEL_UP -> {
-                if (hasQueue) {
+            KeyEvent.KEYCODE_DPAD_UP -> when {
+                navigating -> {
+                    revealControls()
+                    false
+                }
+                hasQueue -> {
                     jump(-1)
                     true
-                } else false
+                }
+                else -> false
             }
 
-            KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_CHANNEL_DOWN -> {
-                if (hasQueue) {
+            KeyEvent.KEYCODE_DPAD_DOWN -> when {
+                navigating -> {
+                    revealControls()
+                    false
+                }
+                hasQueue -> {
                     jump(1)
                     true
-                } else false
+                }
+                else -> false
             }
 
             KeyEvent.KEYCODE_DPAD_RIGHT -> when {
+                navigating -> {
+                    revealControls()
+                    false
+                }
                 live && hasQueue -> {
                     showChannels = true
                     true
@@ -555,10 +582,30 @@ class PlayerController(
                 else -> false
             }
 
-            KeyEvent.KEYCODE_DPAD_LEFT -> {
-                if (!live) {
+            KeyEvent.KEYCODE_DPAD_LEFT -> when {
+                navigating -> {
+                    revealControls()
+                    false
+                }
+                !live -> {
                     player.seekBack()
                     revealControls()
+                    true
+                }
+                else -> false
+            }
+
+            // Ozel tuslar cubugun durumundan bagimsiz calisir.
+            KeyEvent.KEYCODE_CHANNEL_UP, KeyEvent.KEYCODE_PAGE_UP -> {
+                if (hasQueue) {
+                    jump(-1)
+                    true
+                } else false
+            }
+
+            KeyEvent.KEYCODE_CHANNEL_DOWN, KeyEvent.KEYCODE_PAGE_DOWN -> {
+                if (hasQueue) {
+                    jump(1)
                     true
                 } else false
             }
@@ -601,6 +648,29 @@ class PlayerController(
             applyTrack(C.TRACK_TYPE_TEXT, options[next])
             showNotice(options[next].label)
         }
+    }
+
+    /** Oynatilan ogenin favori kaydi. Dizi bolumlerinde favori tutulmaz. */
+    fun currentFavoriteItem(): SavedItem? {
+        val item = current ?: return null
+        if (item.kind == PlayKind.EPISODE) return null
+        return SavedItem(
+            section = item.sectionKey(),
+            id = item.id,
+            name = item.title,
+            icon = item.icon,
+            extension = item.extension,
+            number = item.number
+        )
+    }
+
+    fun toggleCurrentFavorite() {
+        val saved = currentFavoriteItem() ?: return
+        val store = session?.favorites ?: return
+        val added = store.toggle(saved)
+        showNotice(
+            context.getString(if (added) R.string.fav_added else R.string.fav_removed)
+        )
     }
 
     fun release() {

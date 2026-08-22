@@ -44,6 +44,12 @@ enum class SortMode(@StringRes val labelRes: Int) {
     NUMBER(R.string.sort_number)
 }
 
+/** Etkinlikten ana ekrana kumanda tuslarini tasiyan kopru. */
+object HomeBus {
+    @Volatile
+    var onKey: ((Int) -> Boolean)? = null
+}
+
 const val CATEGORY_ALL = ""
 const val CATEGORY_FAVORITES = "__FAV__"
 const val CATEGORY_RECENT = "__NEW__"
@@ -73,6 +79,12 @@ class HomeState(
     var pendingPinCategory by mutableStateOf<Category?>(null)
 
     var contextItem by mutableStateOf<Pair<Section, StreamItem>?>(null)
+
+    /**
+     * Kumandada o an odakta olan kutucuk. MENU tusuna basildiginda bunun
+     * baglam menusu acilir; uzun basma kumandalarda guvenilir calismiyor.
+     */
+    var focusedItem by mutableStateOf<Pair<Section, StreamItem>?>(null)
 
     var epgDialogItem by mutableStateOf<StreamItem?>(null)
 

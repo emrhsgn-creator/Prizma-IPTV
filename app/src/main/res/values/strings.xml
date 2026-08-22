@@ -208,7 +208,7 @@
     <string name="player_catchup">ARŞİV</string>
     <string name="player_next">Sonraki</string>
     <string name="player_prev">Önceki</string>
-    <string name="player_hint_dpad">Yukarı/aşağı: kanal · Sağ: liste · Menü: ayarlar · 0-9: kanal no</string>
+    <string name="player_hint_dpad">Çubuk kapalıyken · yukarı/aşağı: kanal · sağ: liste · 0-9: kanal no · MENU: ayarlar</string>
     <string name="player_channel_number">Kanal: %1$s</string>
     <string name="player_channel_not_found">Kanal bulunamadı: %1$s</string>
     <string name="player_last_channel">Önceki kanal</string>
@@ -326,5 +326,8 @@
 
     <string name="player_stats_source">Kaynak</string>
     <string name="player_stats_index">Sıra</string>
+
+    <string name="player_add_favorite">Favorilere ekle</string>
+    <string name="player_remove_favorite">Favorilerden çıkar</string>
 
 </resources>

@@ -196,7 +196,7 @@
     <string name="player_catchup">ARCHIVE</string>
     <string name="player_next">Next</string>
     <string name="player_prev">Previous</string>
-    <string name="player_hint_dpad">Up/Down: channel · Right: list · Menu: settings · 0-9: channel no</string>
+    <string name="player_hint_dpad">With the bar hidden · up/down: channel · right: list · 0-9: channel no · MENU: settings</string>
     <string name="player_channel_number">Channel: %1$s</string>
     <string name="player_channel_not_found">Channel not found: %1$s</string>
     <string name="player_last_channel">Previous channel</string>
@@ -312,5 +312,8 @@
 
     <string name="player_stats_source">Source</string>
     <string name="player_stats_index">Position</string>
+
+    <string name="player_add_favorite">Add to favorites</string>
+    <string name="player_remove_favorite">Remove from favorites</string>
 
 </resources>

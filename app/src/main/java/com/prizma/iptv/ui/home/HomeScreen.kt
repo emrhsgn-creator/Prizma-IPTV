@@ -1,5 +1,6 @@
 package com.prizma.iptv.ui.home
 
+import android.view.KeyEvent
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -33,6 +34,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -100,6 +102,23 @@ fun HomeScreen(
     val data = HomeData(sections, loading, favorites, history, epgRevision)
 
     LaunchedEffect(session) { state.warmUp() }
+
+    // Kumandadaki MENU / INFO tusu, odaktaki kutucugun baglam menusunu acar.
+    DisposableEffect(state) {
+        HomeBus.onKey = handler@{ code ->
+            if (code != KeyEvent.KEYCODE_MENU && code != KeyEvent.KEYCODE_INFO) {
+                return@handler false
+            }
+            val focused = state.focusedItem
+            val busy = state.contextItem != null ||
+                state.pendingPinCategory != null ||
+                state.epgDialogItem != null
+            if (focused == null || busy) return@handler false
+            state.contextItem = focused
+            true
+        }
+        onDispose { HomeBus.onKey = null }
+    }
 
     BackHandler(enabled = state.route != Route.HOME || state.searchActive) {
         state.handleBack()
