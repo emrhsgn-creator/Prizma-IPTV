@@ -72,7 +72,6 @@ import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
-import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.extractor.DefaultExtractorsFactory
@@ -94,7 +93,7 @@ private data class TrackOption(
 )
 
 /** Canlı yayında kopma sonrası kaç kez yeniden bağlanmayı deneyeceği. */
-private const val LIVE_RETRY_LIMIT = 5
+private const val LIVE_RETRY_LIMIT = 3
 
 object PlayerBus {
     var onKey: ((Int) -> Boolean)? = null
@@ -254,41 +253,20 @@ fun PlayerScreen(
         val http = DefaultHttpDataSource.Factory()
             .setUserAgent("PrizmaIPTV/1.0")
             .setAllowCrossProtocolRedirects(true)
-            .setConnectTimeoutMs(10000)
-            // 20 sn'lik okuma zaman aşımı, sunucu bir an duraksadığında yayını
-            // hata vermeden önce o kadar süre donduruyordu. Kısa tutup
-            // ExoPlayer'ın kendi yeniden denemesine bırakmak daha çabuk toparlıyor.
-            .setReadTimeoutMs(8000)
-
-        val fastZap = Prefs.fastZap(ctx) && live
+            .setConnectTimeoutMs(15000)
+            .setReadTimeoutMs(20000)
 
         val extractors = DefaultExtractorsFactory()
             .setTsExtractorFlags(DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS)
-            // Bu tarama, oynatma başlamadan önce yapılıyor ve süre kestirimi ile
-            // sarma için. Canlı yayında ikisi de yok, yani 282 KB'lık tarama
-            // saf bekleme. Küçültmek kanal açılışını doğrudan hızlandırıyor.
-            .setTsExtractorTimestampSearchBytes(
-                if (fastZap) 200 * 188 else 1500 * 188
-            )
+            .setTsExtractorTimestampSearchBytes(1500 * 188)
 
         val sec = Prefs.bufferSeconds(ctx)
-        // Oynatmaya başlamak için gereken tampon; canlıda düşük tutmak
-        // ilk kareyi öne çekiyor.
-        val startMs = if (fastZap) 700 else 1500
         val loadControl = DefaultLoadControl.Builder()
-            .setBufferDurationsMs(sec * 1000, sec * 2000, startMs, 3000)
-            // Varsayılanda bayt tabanlı sınır süre hedefinden önce devreye girip
-            // tamponu erken kesebiliyor; süreyi öncelikli kılıyoruz.
-            .setPrioritizeTimeOverSizeThresholds(true)
+            .setBufferDurationsMs(sec * 1000, sec * 2000, 1500, 3000)
             .build()
 
         ExoPlayer.Builder(ctx)
             .setLoadControl(loadControl)
-            // Cihazın birincil decoder'ı bu akışta takılırsa yayın ölmesin,
-            // başka bir decoder denensin.
-            .setRenderersFactory(
-                DefaultRenderersFactory(ctx).setEnableDecoderFallback(true)
-            )
             .setSeekBackIncrementMs(10_000)
             .setSeekForwardIncrementMs(30_000)
             .setMediaSourceFactory(DefaultMediaSourceFactory(http, extractors))
