@@ -458,6 +458,11 @@ fun HomeScreen(
                         channels = tiles,
                         favIds = favIds,
                         onToggleFav = toggleFav,
+                        showMove = showingFav && sortMode == SortMode.MANUAL,
+                        onMove = { t, d ->
+                            Store.moveFavorite(ctx, sec.name, t.id, d)
+                            localRev++
+                        },
                         account = account,
                         autoFocus = isTv
                     )

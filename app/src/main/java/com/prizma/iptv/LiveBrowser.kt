@@ -98,6 +98,8 @@ internal fun LiveBrowser(
     channels: List<Tile>,
     favIds: Set<String>,
     onToggleFav: (Tile) -> Unit,
+    showMove: Boolean,
+    onMove: (Tile, Int) -> Unit,
     account: Account,
     autoFocus: Boolean
 ) {
@@ -135,7 +137,9 @@ internal fun LiveBrowser(
             autoFocus = autoFocus,
             onSelect = { index = it },
             onOpen = openChannel,
-            onToggleFav = onToggleFav
+            onToggleFav = onToggleFav,
+            showMove = showMove,
+            onMove = onMove
         )
         PreviewPane(
             host = host,
@@ -204,7 +208,9 @@ private fun ChannelPane(
     autoFocus: Boolean,
     onSelect: (Int) -> Unit,
     onOpen: (Tile) -> Unit,
-    onToggleFav: (Tile) -> Unit
+    onToggleFav: (Tile) -> Unit,
+    showMove: Boolean,
+    onMove: (Tile, Int) -> Unit
 ) {
     val listState = rememberLazyListState()
     val firstRow = remember { FocusRequester() }
@@ -243,7 +249,10 @@ private fun ChannelPane(
                     modifier = if (i == 0) Modifier.focusRequester(firstRow) else Modifier,
                     onFocused = { onSelect(i) },
                     onClick = { if (i == index) onOpen(t) else onSelect(i) },
-                    onFav = { onToggleFav(t) }
+                    onFav = { onToggleFav(t) },
+                    showMove = showMove,
+                    onMoveUp = { onMove(t, -1) },
+                    onMoveDown = { onMove(t, 1) }
                 )
             }
         }
@@ -261,7 +270,10 @@ private fun ChannelRow(
     modifier: Modifier,
     onFocused: () -> Unit,
     onClick: () -> Unit,
-    onFav: () -> Unit
+    onFav: () -> Unit,
+    showMove: Boolean,
+    onMoveUp: () -> Unit,
+    onMoveDown: () -> Unit
 ) {
     val shape = RoundedCornerShape(10.dp)
     Row(
@@ -298,6 +310,12 @@ private fun ChannelRow(
                 overflow = TextOverflow.Ellipsis
             )
         }
+        // Favoriler listesinde elle sıralama. Dikey bir liste olduğu için
+        // yukarı/aşağı; poster ızgarasındaki sol/sağ karşılığı.
+        if (showMove) {
+            MoveButton("▲", onMoveUp)
+            MoveButton("▼", onMoveDown)
+        }
         // Kalp, satırın çocuğu değil kardeşi: kumandada sağ ok ile üstüne
         // gidilebiliyor. İçine gömülü olduğunda odak hiç ona geçmiyordu.
         Box(
@@ -316,6 +334,20 @@ private fun ChannelRow(
             )
         }
     }
+}
+
+@Composable
+private fun MoveButton(label: String, onClick: () -> Unit) {
+    Text(
+        label,
+        color = PrizmaAccent,
+        fontSize = 13.sp,
+        modifier = Modifier
+            .tvFocus(RoundedCornerShape(6.dp), 1.0f)
+            .clip(RoundedCornerShape(6.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 6.dp, vertical = 4.dp)
+    )
 }
 
 @Composable

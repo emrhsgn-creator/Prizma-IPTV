@@ -301,11 +301,22 @@ fun PlayerScreen(
         player.playWhenReady = true
     }
 
-    DisposableEffect(locked, showMenu, showList, hasList, live) {
+    DisposableEffect(locked, showMenu, showList, hasList, live, barVisible) {
         PlayerBus.onKey = handler@{ code ->
             if (showMenu || showList) return@handler false
             if (locked) {
                 return@handler code != KeyEvent.KEYCODE_BACK
+            }
+            // Kontrol çubuğu açıkken yön tuşları çubuğun kendi odak gezinmesine
+            // ait. Kısayollar bunları yutunca kullanıcı oynat/duraklat, ileri
+            // sarma ve ayar düğmelerine kumandayla hiç ulaşamıyordu.
+            if (barVisible) {
+                when (code) {
+                    KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT,
+                    KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN,
+                    KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER ->
+                        return@handler false
+                }
             }
             when (code) {
                 KeyEvent.KEYCODE_DPAD_RIGHT -> {
