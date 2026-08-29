@@ -83,7 +83,7 @@ private const val PREVIEW_DELAY_MS = 700L
  */
 @OptIn(UnstableApi::class)
 @Composable
-fun LiveBrowser(
+internal fun LiveBrowser(
     host: String,
     user: String,
     pass: String,
