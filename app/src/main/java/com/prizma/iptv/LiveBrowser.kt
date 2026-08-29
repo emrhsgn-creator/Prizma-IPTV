@@ -354,8 +354,8 @@ private fun rememberPreviewPlayer(): ExoPlayer {
         val http = DefaultHttpDataSource.Factory()
             .setUserAgent("PrizmaIPTV/1.0")
             .setAllowCrossProtocolRedirects(true)
-            .setConnectTimeoutMs(15000)
-            .setReadTimeoutMs(20000)
+            .setConnectTimeoutMs(10000)
+            .setReadTimeoutMs(8000)
 
         val extractors = DefaultExtractorsFactory()
             .setTsExtractorFlags(DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS)

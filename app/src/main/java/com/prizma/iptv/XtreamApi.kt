@@ -112,7 +112,9 @@ object XtreamApi {
         }
     }
 
-    suspend fun login(host: String, user: String, pass: String): Account {
+    suspend fun login(
+        host: String, user: String, pass: String
+    ): Account = withContext(Dispatchers.IO) {
         val body = request(host, user, pass, "")
         val root = try {
             JSONObject(body)
@@ -123,7 +125,7 @@ object XtreamApi {
         if (info.opt("auth")?.toString() != "1") throw Exception("Kullanıcı adı veya şifre hatalı.")
         val status = info.optString("status", "-")
         if (!status.equals("Active", true)) throw Exception("Hesap aktif değil (durum: $status).")
-        return Account(
+        Account(
             username = info.optString("username", user),
             status = status,
             expiry = formatDate(info.opt("exp_date")?.toString()),
@@ -139,7 +141,7 @@ object XtreamApi {
 
     suspend fun categories(
         host: String, user: String, pass: String, section: Section
-    ): List<Category> {
+    ): List<Category> = withContext(Dispatchers.IO) {
         val body = request(host, user, pass, "&action=" + section.categoryAction)
         val arr = try { JSONArray(body) } catch (e: Exception) { JSONArray() }
         val out = ArrayList<Category>()
@@ -152,12 +154,12 @@ object XtreamApi {
                 )
             )
         }
-        return out
+        out
     }
 
     suspend fun allStreams(
         host: String, user: String, pass: String, section: Section
-    ): List<StreamItem> {
+    ): List<StreamItem> = withContext(Dispatchers.IO) {
         val body = request(host, user, pass, "&action=" + section.streamAction)
         val arr = try { JSONArray(body) } catch (e: Exception) { JSONArray() }
         val out = ArrayList<StreamItem>(arr.length())
@@ -175,7 +177,7 @@ object XtreamApi {
                 )
             )
         }
-        return out
+        out
     }
 
     private fun parseRating(o: JSONObject): String {
@@ -196,7 +198,7 @@ object XtreamApi {
     }
     suspend fun seriesInfo(
         host: String, user: String, pass: String, seriesId: String
-    ): SeriesInfo {
+    ): SeriesInfo = withContext(Dispatchers.IO) {
         val body = request(host, user, pass, "&action=get_series_info&series_id=" + enc(seriesId))
         val root = try { JSONObject(body) } catch (e: Exception) {
             throw Exception("Dizi bilgisi alınamadı.")
@@ -232,7 +234,7 @@ object XtreamApi {
             }
         }
 
-        return SeriesInfo(
+        SeriesInfo(
             plot = info.optString("plot", ""),
             cover = info.optString("cover", ""),
             genre = info.optString("genre", ""),
@@ -244,13 +246,17 @@ object XtreamApi {
     }
 suspend fun shortEpg(
         host: String, user: String, pass: String, streamId: String, limit: Int = 8
-    ): List<EpgItem> {
+    ): List<EpgItem> = withContext(Dispatchers.IO) {
         val body = request(
             host, user, pass,
             "&action=get_short_epg&stream_id=" + enc(streamId) + "&limit=" + limit
         )
-        val root = try { JSONObject(body) } catch (e: Exception) { return emptyList() }
-        val arr = root.optJSONArray("epg_listings") ?: return emptyList()
+        val root = try {
+            JSONObject(body)
+        } catch (e: Exception) {
+            return@withContext emptyList()
+        }
+        val arr = root.optJSONArray("epg_listings") ?: return@withContext emptyList()
         val out = ArrayList<EpgItem>(arr.length())
         for (i in 0 until arr.length()) {
             val o = arr.optJSONObject(i) ?: continue
@@ -263,7 +269,7 @@ suspend fun shortEpg(
                 )
             )
         }
-        return out.sortedBy { it.start }
+        out.sortedBy { it.start }
     }
 
     private fun decodeB64(s: String): String {
@@ -276,7 +282,7 @@ suspend fun shortEpg(
     }
     suspend fun vodInfo(
         host: String, user: String, pass: String, vodId: String
-    ): VodInfo {
+    ): VodInfo = withContext(Dispatchers.IO) {
         val body = request(host, user, pass, "&action=get_vod_info&vod_id=" + enc(vodId))
         val root = try { JSONObject(body) } catch (e: Exception) {
             throw Exception("Film bilgisi alınamadı.")
@@ -284,7 +290,7 @@ suspend fun shortEpg(
         val info = root.optJSONObject("info") ?: JSONObject()
         val movie = root.optJSONObject("movie_data") ?: JSONObject()
 
-        return VodInfo(
+        VodInfo(
             plot = info.optString("plot", info.optString("description", "")),
             cover = info.optString("movie_image", info.optString("cover_big", "")),
             backdrop = info.optJSONArray("backdrop_path")?.optString(0, "").orEmpty(),

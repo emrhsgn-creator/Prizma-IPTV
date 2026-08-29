@@ -44,6 +44,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -71,6 +72,7 @@ import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.extractor.DefaultExtractorsFactory
@@ -78,7 +80,10 @@ import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.PlayerView
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.Locale
 
 private data class TrackOption(
@@ -87,6 +92,9 @@ private data class TrackOption(
     val trackIndex: Int,
     val selected: Boolean
 )
+
+/** Canlı yayında kopma sonrası kaç kez yeniden bağlanmayı deneyeceği. */
+private const val LIVE_RETRY_LIMIT = 5
 
 object PlayerBus {
     var onKey: ((Int) -> Boolean)? = null
@@ -222,6 +230,8 @@ fun PlayerScreen(
     var viewRef by remember { mutableStateOf<PlayerView?>(null) }
     var barVisible by remember { mutableStateOf(true) }
     var triedFallback by remember { mutableStateOf(false) }
+    var retries by remember { mutableIntStateOf(0) }
+    val scope = rememberCoroutineScope()
 
     val live = section == Section.LIVE.name
     val hasList = urls.size > 1
@@ -244,8 +254,11 @@ fun PlayerScreen(
         val http = DefaultHttpDataSource.Factory()
             .setUserAgent("PrizmaIPTV/1.0")
             .setAllowCrossProtocolRedirects(true)
-            .setConnectTimeoutMs(15000)
-            .setReadTimeoutMs(20000)
+            .setConnectTimeoutMs(10000)
+            // 20 sn'lik okuma zaman aşımı, sunucu bir an duraksadığında yayını
+            // hata vermeden önce o kadar süre donduruyordu. Kısa tutup
+            // ExoPlayer'ın kendi yeniden denemesine bırakmak daha çabuk toparlıyor.
+            .setReadTimeoutMs(8000)
 
         val extractors = DefaultExtractorsFactory()
             .setTsExtractorFlags(DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS)
@@ -254,10 +267,18 @@ fun PlayerScreen(
         val sec = Prefs.bufferSeconds(ctx)
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(sec * 1000, sec * 2000, 1500, 3000)
+            // Varsayılanda bayt tabanlı sınır süre hedefinden önce devreye girip
+            // tamponu erken kesebiliyor; süreyi öncelikli kılıyoruz.
+            .setPrioritizeTimeOverSizeThresholds(true)
             .build()
 
         ExoPlayer.Builder(ctx)
             .setLoadControl(loadControl)
+            // Cihazın birincil decoder'ı bu akışta takılırsa yayın ölmesin,
+            // başka bir decoder denensin.
+            .setRenderersFactory(
+                DefaultRenderersFactory(ctx).setEnableDecoderFallback(true)
+            )
             .setSeekBackIncrementMs(10_000)
             .setSeekForwardIncrementMs(30_000)
             .setMediaSourceFactory(DefaultMediaSourceFactory(http, extractors))
@@ -330,14 +351,18 @@ fun PlayerScreen(
     LaunchedEffect(Unit) {
         if (startAt > 0) notice = "Kaldığın yerden devam ediliyor"
         while (true) {
-            delay(5000)
+            delay(10_000)
             val i = player.currentMediaItemIndex
             val d = player.duration
             if (resumable && d > 0) {
-                Store.record(
-                    ctx, section, idAt(i), titleAt(i), iconAt(i), extAt(i),
-                    player.currentPosition, d
-                )
+                // Tüm geçmişi okuyup yeniden yazıyor; ana iş parçacığında
+                // yapılınca oynatma sırasında düzenli takılma yaratıyordu.
+                val pos = player.currentPosition
+                withContext(Dispatchers.IO) {
+                    Store.record(
+                        ctx, section, idAt(i), titleAt(i), iconAt(i), extAt(i), pos, d
+                    )
+                }
             }
         }
     }
@@ -358,21 +383,35 @@ fun PlayerScreen(
             override fun onPlayerError(e: PlaybackException) {
                 val i = player.currentMediaItemIndex
                 val url = urls.getOrNull(i).orEmpty()
-                if (live && url.endsWith(".ts") && !triedFallback) {
-                    triedFallback = true
-                    val alt = url.removeSuffix(".ts") + ".m3u8"
-                    player.setMediaItem(MediaItem.fromUri(alt))
-                    player.prepare()
-                    player.playWhenReady = true
-                    notice = "Alternatif format deneniyor"
-                } else {
-                    error = "Oynatılamadı (${e.errorCodeName})"
+                when {
+                    live && url.endsWith(".ts") && !triedFallback -> {
+                        triedFallback = true
+                        val alt = url.removeSuffix(".ts") + ".m3u8"
+                        player.setMediaItem(MediaItem.fromUri(alt))
+                        player.prepare()
+                        player.playWhenReady = true
+                        notice = "Alternatif format deneniyor"
+                    }
+
+                    // Canlı yayında kısa bir kopma kalıcı hata sayılmasın.
+                    live && retries < LIVE_RETRY_LIMIT -> {
+                        retries++
+                        notice = "Bağlantı koptu, yeniden deneniyor ($retries)"
+                        scope.launch {
+                            delay(1000L * retries)
+                            player.prepare()
+                            player.playWhenReady = true
+                        }
+                    }
+
+                    else -> error = "Oynatılamadı (${e.errorCodeName})"
                 }
             }
 
             override fun onTracksChanged(t: Tracks) {
                 tracks = t
                 error = ""
+                retries = 0
             }
 
             override fun onMediaItemTransition(item: MediaItem?, reason: Int) {
@@ -380,6 +419,7 @@ fun PlayerScreen(
                 current = i
                 error = ""
                 triedFallback = false
+                retries = 0
                 if (reason != Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT && hasList) {
                     notice = titleAt(i)
                 }
