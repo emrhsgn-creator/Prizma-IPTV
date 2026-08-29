@@ -79,12 +79,13 @@ import coil.request.ImageRequest
 private val BarStart = Color(0xFF23306E)
 private val BarEnd = Color(0xFF5B3FA8)
 private val SideBg = Color(0xFF0C0F1D)
-private val Muted = Color(0xFF8A90A0)
-private const val FAV_CAT = "__FAV__"
+internal val Muted = Color(0xFF8A90A0)
+internal const val FAV_CAT = "__FAV__"
+internal const val HIST_CAT = "__HIST__"
 
 private data class SectionData(val categories: List<Category>, val items: List<StreamItem>)
 
-private data class Tile(
+internal data class Tile(
     val id: String,
     val name: String,
     val icon: String,
@@ -136,7 +137,7 @@ private fun launchTile(ctx: Context, host: String, user: String, pass: String, t
     )
 }
 
-private fun playLiveList(
+internal fun playLiveList(
     ctx: Context, host: String, user: String, pass: String,
     all: List<Tile>, picked: Tile
 ) {
@@ -163,7 +164,7 @@ private fun playLiveList(
 }
 
 @Composable
-private fun Modifier.tvFocus(
+internal fun Modifier.tvFocus(
     shape: Shape = RoundedCornerShape(10.dp),
     scaleUp: Float = 1.06f
 ): Modifier {
@@ -380,12 +381,19 @@ fun HomeScreen(
                 }
 
                 val sectionFavs = favs.filter { it.section == sec.name }
+                val sectionHist = hist.filter { it.section == sec.name }
                 val favIds = remember(sectionFavs) { sectionFavs.map { it.id }.toSet() }
                 val showingFav = selectedCat == FAV_CAT
+                val showingHist = selectedCat == HIST_CAT
                 val q = query.trim()
 
-                val tiles: List<Tile> = remember(data, selectedCat, q, sortMode, sectionFavs) {
+                val tiles: List<Tile> = remember(
+                    data, selectedCat, q, sortMode, sectionFavs, sectionHist
+                ) {
                     when {
+                        showingHist -> sectionHist.map { it.toTile() }
+                            .filter { q.isEmpty() || it.name.contains(q, true) }
+
                         showingFav -> {
                             val base = sectionFavs.map { it.toTile() }
                             when (sortMode) {
@@ -414,6 +422,26 @@ fun HomeScreen(
                         if (added) "Favorilere eklendi" else "Favorilerden çıkarıldı",
                         Toast.LENGTH_SHORT
                     ).show()
+                }
+
+                if (sec == Section.LIVE && wide) {
+                    LiveBrowser(
+                        host = host,
+                        user = user,
+                        pass = pass,
+                        categories = data.categories,
+                        totalCount = data.items.size,
+                        favCount = sectionFavs.size,
+                        histCount = sectionHist.size,
+                        selectedCat = selectedCat,
+                        onSelectCat = { selectedCat = it },
+                        channels = tiles,
+                        favIds = favIds,
+                        onToggleFav = toggleFav,
+                        account = account,
+                        autoFocus = isTv
+                    )
+                    return@BoxWithConstraints
                 }
 
                 val body: @Composable () -> Unit = {
@@ -472,6 +500,11 @@ fun HomeScreen(
                                     }
                                 }
                                 item {
+                                    SideRow("SON İZLENENLER", sectionHist.size, showingHist) {
+                                        selectedCat = HIST_CAT
+                                    }
+                                }
+                                item {
                                     SideRow("TÜMÜ", data.items.size, selectedCat.isEmpty()) {
                                         selectedCat = ""
                                     }
@@ -500,6 +533,11 @@ fun HomeScreen(
                             item {
                                 Chip("FAVORİLER (${sectionFavs.size})", showingFav) {
                                     selectedCat = FAV_CAT
+                                }
+                            }
+                            item {
+                                Chip("SON İZLENENLER (${sectionHist.size})", showingHist) {
+                                    selectedCat = HIST_CAT
                                 }
                             }
                             item {
@@ -752,7 +790,7 @@ private fun ShelfTile(t: Tile, onClick: () -> Unit) {
 }
 
 @Composable
-private fun SideRow(name: String, count: Int, selected: Boolean, onClick: () -> Unit) {
+internal fun SideRow(name: String, count: Int, selected: Boolean, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
