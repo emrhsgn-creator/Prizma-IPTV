@@ -17,6 +17,7 @@ object Prefs {
     private const val K_ACTIVE = "active"
     private const val K_BUFFER = "buffer"
     private const val K_AUTONEXT = "autonext"
+    private const val K_FASTZAP = "fastzap"
 
     private fun p(ctx: Context) = ctx.getSharedPreferences(FILE, Context.MODE_PRIVATE)
 
@@ -88,6 +89,12 @@ object Prefs {
 
     fun setBufferSeconds(ctx: Context, v: Int) {
         p(ctx).edit().putInt(K_BUFFER, v).apply()
+    }
+
+    fun fastZap(ctx: Context): Boolean = p(ctx).getBoolean(K_FASTZAP, true)
+
+    fun setFastZap(ctx: Context, v: Boolean) {
+        p(ctx).edit().putBoolean(K_FASTZAP, v).apply()
     }
 
     fun autoNext(ctx: Context): Boolean = p(ctx).getBoolean(K_AUTONEXT, true)

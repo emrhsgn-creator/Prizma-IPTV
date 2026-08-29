@@ -260,13 +260,23 @@ fun PlayerScreen(
             // ExoPlayer'ın kendi yeniden denemesine bırakmak daha çabuk toparlıyor.
             .setReadTimeoutMs(8000)
 
+        val fastZap = Prefs.fastZap(ctx) && live
+
         val extractors = DefaultExtractorsFactory()
             .setTsExtractorFlags(DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS)
-            .setTsExtractorTimestampSearchBytes(1500 * 188)
+            // Bu tarama, oynatma başlamadan önce yapılıyor ve süre kestirimi ile
+            // sarma için. Canlı yayında ikisi de yok, yani 282 KB'lık tarama
+            // saf bekleme. Küçültmek kanal açılışını doğrudan hızlandırıyor.
+            .setTsExtractorTimestampSearchBytes(
+                if (fastZap) 200 * 188 else 1500 * 188
+            )
 
         val sec = Prefs.bufferSeconds(ctx)
+        // Oynatmaya başlamak için gereken tampon; canlıda düşük tutmak
+        // ilk kareyi öne çekiyor.
+        val startMs = if (fastZap) 700 else 1500
         val loadControl = DefaultLoadControl.Builder()
-            .setBufferDurationsMs(sec * 1000, sec * 2000, 1500, 3000)
+            .setBufferDurationsMs(sec * 1000, sec * 2000, startMs, 3000)
             // Varsayılanda bayt tabanlı sınır süre hedefinden önce devreye girip
             // tamponu erken kesebiliyor; süreyi öncelikli kılıyoruz.
             .setPrioritizeTimeOverSizeThresholds(true)

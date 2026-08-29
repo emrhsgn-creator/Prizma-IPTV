@@ -51,6 +51,7 @@ fun SettingsScreen(
     var rev by remember { mutableIntStateOf(0) }
     var buffer by remember { mutableIntStateOf(Prefs.bufferSeconds(ctx)) }
     var autoNext by remember { mutableStateOf(Prefs.autoNext(ctx)) }
+    var fastZap by remember { mutableStateOf(Prefs.fastZap(ctx)) }
 
     val profiles = remember(rev) { Prefs.profiles(ctx) }
     val activeKey = remember(rev) { Prefs.activeKey(ctx) }
@@ -192,6 +193,31 @@ fun SettingsScreen(
                         onCheckedChange = {
                             autoNext = it
                             Prefs.setAutoNext(ctx, it)
+                        }
+                    )
+                }
+
+                Spacer(Modifier.height(16.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Hızlı kanal açılışı", color = Color(0xFFC3C8D4), fontSize = 12.sp)
+                        Text(
+                            "Canlı yayınlarda gereksiz ön taramayı atlar. " +
+                                "Bir kanal açılmazsa kapatmayı deneyin.",
+                            color = Color(0xFF6E7686),
+                            fontSize = 10.sp
+                        )
+                    }
+                    Switch(
+                        checked = fastZap,
+                        onCheckedChange = {
+                            fastZap = it
+                            Prefs.setFastZap(ctx, it)
+                            Toast.makeText(
+                                ctx,
+                                "Sonraki kanal açılışında geçerli olacak",
+                                Toast.LENGTH_SHORT
+                            ).show()
                         }
                     )
                 }
