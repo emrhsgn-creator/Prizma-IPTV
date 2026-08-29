@@ -56,6 +56,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
@@ -400,6 +401,17 @@ private fun rememberPreviewPlayer(): ExoPlayer {
             )
             .setMediaSourceFactory(DefaultMediaSourceFactory(http, extractors))
             .build()
+            .apply {
+                // Önizleme sessiz çalışır. Cihazların ses çözücüsü çoğu zaman
+                // tek örnektir (özellikle AC3 / E-AC3 gibi biçimlerde); önizleme
+                // onu tutunca tam ekranda açılan kanalın sesi çıkmıyordu.
+                // İzi tamamen kapatmak, sesi kısmaktan farklı: çözücü hiç
+                // oluşturulmuyor, dolayısıyla çekişme de olmuyor.
+                trackSelectionParameters = trackSelectionParameters
+                    .buildUpon()
+                    .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, true)
+                    .build()
+            }
     }
     DisposableEffect(player) {
         onDispose { player.release() }
