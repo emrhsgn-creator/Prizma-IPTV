@@ -72,7 +72,7 @@ import kotlinx.coroutines.delay
 private val PaneBg = Color(0xFF0C0F1D)
 private val ListBg = Color(0xFF10142A)
 private val CardBg = Color(0xFF141A2E)
-private val Divider = Color(0xFF1E2440)
+private val TrackBg = Color(0xFF1E2440)
 
 /** Önizleme başlamadan önce beklenen süre; listede hızlı gezerken sunucuyu yormamak için. */
 private const val PREVIEW_DELAY_MS = 700L
@@ -369,7 +369,13 @@ private fun PreviewPane(
         }
     }
 
-    val owner = ctx as? LifecycleOwner
+    val owner = remember(ctx) {
+        var c: android.content.Context? = ctx
+        while (c != null && c !is LifecycleOwner) {
+            c = (c as? android.content.ContextWrapper)?.baseContext
+        }
+        c as? LifecycleOwner
+    }
     DisposableEffect(owner) {
         val obs = LifecycleEventObserver { _, event ->
             when (event) {
@@ -526,7 +532,7 @@ private fun EpgList(epg: List<EpgItem>?) {
                                 .fillMaxWidth()
                                 .height(3.dp)
                                 .clip(RoundedCornerShape(2.dp))
-                                .background(Divider)
+                                .background(TrackBg)
                         ) {
                             Box(
                                 Modifier
