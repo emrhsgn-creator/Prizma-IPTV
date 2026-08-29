@@ -204,6 +204,7 @@ fun HomeScreen(
     var reload by remember { mutableIntStateOf(0) }
     var localRev by remember { mutableIntStateOf(0) }
     var sortMode by remember { mutableStateOf(SortMode.MANUAL) }
+    var homeReady by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         Creds.host = host
@@ -224,6 +225,25 @@ fun HomeScreen(
 
     LaunchedEffect(reload, cacheEpoch) {
         if (reload > 0 || cacheEpoch > 0) cache.clear()
+    }
+
+    // Ana Sayfa rafları film/dizi önbelleğinden besleniyor, ama önbelleği yalnızca
+    // ilgili sekmeye girildiğinde dolduruyorduk. Filmler/Diziler'e hiç uğramadan
+    // açılışta Ana Sayfa bomboş kalıp sonsuza kadar dönen bir bekleme göstergesi
+    // gösteriyordu; burada sekmeye girilmeden de dolduruyoruz.
+    LaunchedEffect(tab, reload, cacheEpoch) {
+        if (tab != 0) return@LaunchedEffect
+        homeReady = false
+        for (sec in listOf(Section.VOD, Section.SERIES)) {
+            if (cache.containsKey(sec)) continue
+            runCatching {
+                val cats = XtreamApi.categories(host, user, pass, sec)
+                val items = XtreamApi.allStreams(host, user, pass, sec)
+                val counts = items.groupingBy { it.categoryId }.eachCount()
+                cache[sec] = SectionData(cats.map { it.copy(count = counts[it.id] ?: 0) }, items)
+            }
+        }
+        homeReady = true
     }
 
     LaunchedEffect(section, reload) {
@@ -343,7 +363,7 @@ fun HomeScreen(
             }
 
             if (tab == 0) {
-                HomeTab(ctx, host, user, pass, favs, hist, cache)
+                HomeTab(ctx, host, user, pass, favs, hist, cache, homeReady)
                 return@Column
             }
 
@@ -590,7 +610,8 @@ private fun HomeTab(
     pass: String,
     favs: List<SavedItem>,
     hist: List<WatchState>,
-    cache: Map<Section, SectionData>
+    cache: Map<Section, SectionData>,
+    ready: Boolean
 ) {
     val devam = hist.filter {
         it.duration > 0 && it.position > 60_000 && it.position < it.duration * 95 / 100
@@ -675,7 +696,15 @@ private fun HomeTab(
                         .padding(60.dp),
                     Alignment.Center
                 ) {
-                    CircularProgressIndicator(color = PrizmaAccent)
+                    if (ready) {
+                        Text(
+                            "İçerik alınamadı. Yenilemeyi deneyin.",
+                            color = Muted,
+                            fontSize = 13.sp
+                        )
+                    } else {
+                        CircularProgressIndicator(color = PrizmaAccent)
+                    }
                 }
             }
         }
