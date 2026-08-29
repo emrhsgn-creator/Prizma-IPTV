@@ -191,9 +191,15 @@ private fun collectTracks(tracks: Tracks, type: Int): List<TrackOption> {
                             .replaceFirstChar { it.uppercase() }
                     else -> "Kanal ${ti + 1}"
                 }
-                val extra = if (type == C.TRACK_TYPE_AUDIO && f.channelCount > 0) {
-                    " · ${f.channelCount}ch"
-                } else ""
+                // Codec ve destek bilgisi teşhis için: cihaz bir ses biçimini
+                // (örneğin AC3) çözemiyorsa iz listede görünür ama sesi çıkmaz.
+                val extra = buildString {
+                    if (type == C.TRACK_TYPE_AUDIO) {
+                        if (f.channelCount > 0) append(" · ${f.channelCount}ch")
+                        f.sampleMimeType?.substringAfter('/')?.let { append(" · $it") }
+                    }
+                    if (!group.isTrackSupported(ti)) append(" · desteklenmiyor")
+                }
                 out.add(TrackOption(name + extra, gi, ti, group.isTrackSelected(ti)))
             }
         }
