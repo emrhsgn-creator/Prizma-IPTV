@@ -105,7 +105,10 @@ fun PrizmaApp() {
                     }
                 },
                 onAddProfile = { forceLogin = true },
-                onClearCache = { cacheEpoch++ }
+                onClearCache = {
+                    Catalog.clear(ctx)
+                    cacheEpoch++
+                }
             )
 
             else -> HomeScreen(

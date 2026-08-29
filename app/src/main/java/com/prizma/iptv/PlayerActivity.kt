@@ -456,6 +456,12 @@ fun PlayerScreen(
             showList -> showList = false
             showMenu -> showMenu = false
             locked -> locked = false
+            // Çubuk açıkken geri önce çubuğu kapatmalı; doğrudan oynatıcıdan
+            // çıkmak istenmeyen bir sıçrama.
+            barVisible -> {
+                viewRef?.hideController()
+                barVisible = false
+            }
             else -> onBack()
         }
     }

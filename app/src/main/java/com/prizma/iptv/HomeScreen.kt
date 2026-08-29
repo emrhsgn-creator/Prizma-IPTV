@@ -74,6 +74,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import coil.request.ImageRequest
 
 private val BarStart = Color(0xFF23306E)
@@ -83,7 +85,7 @@ internal val Muted = Color(0xFF8A90A0)
 internal const val FAV_CAT = "__FAV__"
 internal const val HIST_CAT = "__HIST__"
 
-private data class SectionData(val categories: List<Category>, val items: List<StreamItem>)
+internal data class SectionData(val categories: List<Category>, val items: List<StreamItem>)
 
 internal data class Tile(
     val id: String,
@@ -98,6 +100,15 @@ internal data class Tile(
 
 private enum class SortMode(val label: String) {
     MANUAL("Elle"), NAME("A-Z"), RATING("Puan"), ADDED("Eklenme")
+}
+
+private suspend fun fetchSection(
+    host: String, user: String, pass: String, sec: Section
+): SectionData {
+    val cats = XtreamApi.categories(host, user, pass, sec)
+    val items = XtreamApi.allStreams(host, user, pass, sec)
+    val counts = items.groupingBy { it.categoryId }.eachCount()
+    return SectionData(cats.map { it.copy(count = counts[it.id] ?: 0) }, items)
 }
 
 private fun ratingOf(s: String): Double = s.replace(',', '.').toDoubleOrNull() ?: 0.0
@@ -237,11 +248,11 @@ fun HomeScreen(
         homeReady = false
         for (sec in listOf(Section.VOD, Section.SERIES)) {
             if (cache.containsKey(sec)) continue
-            runCatching {
-                val cats = XtreamApi.categories(host, user, pass, sec)
-                val items = XtreamApi.allStreams(host, user, pass, sec)
-                val counts = items.groupingBy { it.categoryId }.eachCount()
-                cache[sec] = SectionData(cats.map { it.copy(count = counts[it.id] ?: 0) }, items)
+            withContext(Dispatchers.IO) { Catalog.load(ctx, host, user, sec) }
+                ?.let { cache[sec] = it }
+            runCatching { fetchSection(host, user, pass, sec) }.getOrNull()?.let { fresh ->
+                cache[sec] = fresh
+                withContext(Dispatchers.IO) { Catalog.save(ctx, host, user, sec, fresh) }
             }
         }
         homeReady = true
@@ -251,15 +262,18 @@ fun HomeScreen(
         val sec = section ?: return@LaunchedEffect
         selectedCat = ""
         if (cache.containsKey(sec)) return@LaunchedEffect
-        loading = true
         error = ""
+        // Diskteki kopya varsa anında göster; taze sürüm arkadan gelip üstüne yazar.
+        val disk = withContext(Dispatchers.IO) { Catalog.load(ctx, host, user, sec) }
+        if (disk != null) cache[sec] = disk
+        loading = disk == null
         try {
-            val cats = XtreamApi.categories(host, user, pass, sec)
-            val items = XtreamApi.allStreams(host, user, pass, sec)
-            val counts = items.groupingBy { it.categoryId }.eachCount()
-            cache[sec] = SectionData(cats.map { it.copy(count = counts[it.id] ?: 0) }, items)
+            val fresh = fetchSection(host, user, pass, sec)
+            cache[sec] = fresh
+            withContext(Dispatchers.IO) { Catalog.save(ctx, host, user, sec, fresh) }
         } catch (e: Exception) {
-            error = e.message ?: "İçerik alınamadı"
+            // Ağ yoksa diskteki liste kullanılmaya devam etsin
+            if (disk == null) error = e.message ?: "İçerik alınamadı"
         }
         loading = false
     }
