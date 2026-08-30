@@ -22,6 +22,60 @@ jobs:
         with:
           gradle-version: '8.11.1'
 
+      - name: NDK ve CMake kur
+        run: |
+          set -eu
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            "ndk;26.1.10909125" "cmake;3.22.1"
+
+      - name: FFmpeg kaynagini al
+        run: |
+          set -eu
+          git clone --depth 1 --branch release/6.0 \
+            https://github.com/FFmpeg/FFmpeg.git app/src/main/jni/ffmpeg
+
+      # Derlenmis kitapliklar onbellege alinir; ilk derleme uzun surer,
+      # sonrakiler dogrudan buradan gelir.
+      - name: FFmpeg kitapliklari onbellegi
+        id: ffmpeg-cache
+        uses: actions/cache@v4
+        with:
+          path: app/src/main/jni/ffmpeg/android-libs
+          key: ffmpeg-6.0-ndk26.1-abi21-audio-v1
+
+      - name: FFmpeg derle
+        if: steps.ffmpeg-cache.outputs.cache-hit != 'true'
+        run: |
+          set -eu
+          FFMPEG_MODULE_PATH="$(pwd)/app/src/main"
+          NDK_PATH="$ANDROID_HOME/ndk/26.1.10909125"
+          HOST_PLATFORM="linux-x86_64"
+          ANDROID_ABI=21
+          # media3 MPEG Layer II icin FFmpeg'in mp3 cozucusunu istiyor; mpegaudio
+          # ailesinin tamami aciliyor ki Layer I ve II de cozulebilsin.
+          ENABLED_DECODERS=(
+            mp1 mp1float mp2 mp2float mp3 mp3float
+            aac aac_latm ac3 eac3 dca truehd
+            alac flac vorbis opus
+            pcm_alaw pcm_mulaw pcm_s16le pcm_s16be pcm_s24le
+          )
+          cd "${FFMPEG_MODULE_PATH}/jni"
+          ./build_ffmpeg.sh \
+            "${FFMPEG_MODULE_PATH}" "${NDK_PATH}" "${HOST_PLATFORM}" \
+            "${ANDROID_ABI}" "${ENABLED_DECODERS[@]}"
+
+      - name: FFmpeg kitapliklarini dogrula
+        run: |
+          set -eu
+          for abi in armeabi-v7a arm64-v8a x86 x86_64; do
+            for lib in libavcodec.a libavutil.a libswresample.a; do
+              f="app/src/main/jni/ffmpeg/android-libs/$abi/$lib"
+              test -s "$f" || { echo "EKSIK: $f"; exit 1; }
+            done
+          done
+          echo "Dort mimari icin de FFmpeg kitapliklari hazir."
+
       - name: Imza anahtarini yaz
         env:
           KS: ${{ secrets.KEYSTORE_BASE64 }}

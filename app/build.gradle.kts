@@ -1,3 +1,9 @@
+// FFmpeg ses çözücüsü yalnızca derlenmiş kitaplıklar hazırsa APK'ya giriyor.
+// Hazır değilse yerel derleme kırılmasın diye yerel derleme atlanıyor; uygulama
+// o zaman eskisi gibi yalnızca cihazın çözücülerini kullanır.
+val ffmpegLibs = file("src/main/jni/ffmpeg/android-libs")
+val ffmpegReady = ffmpegLibs.isDirectory && ffmpegLibs.list()?.isNotEmpty() == true
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -12,8 +18,22 @@ android {
         applicationId = "com.prizma.iptv"
         minSdk = 21
         targetSdk = 35
-        versionCode = 13
-        versionName = "0.2.11"
+        versionCode = 14
+        versionName = "0.3.0"
+
+        if (ffmpegReady) {
+            ndk { abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64") }
+        }
+    }
+
+    if (ffmpegReady) {
+        ndkVersion = "26.1.10909125"
+        externalNativeBuild {
+            cmake {
+                path = file("src/main/jni/CMakeLists.txt")
+                version = "3.22.1"
+            }
+        }
     }
 signingConfigs {
         create("release") {

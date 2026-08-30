@@ -71,6 +71,7 @@ import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.extractor.DefaultExtractorsFactory
@@ -266,6 +267,16 @@ fun PlayerScreen(
 
         ExoPlayer.Builder(ctx)
             .setLoadControl(loadControl)
+            // Cihazda bir ses biçiminin çözücüsü hiç yoksa (örneğin MPEG
+            // Layer II) FFmpeg çözücüsü devreye girsin. MODE_ON, önce cihazın
+            // kendi çözücüsünü dener; yalnızca o yoksa FFmpeg'e düşer. Daha
+            // önce sorun çıkaran setEnableDecoderFallback ile aynı şey değil:
+            // o, çalışan bir çözücü hata verdiğinde başkasına geçiyordu.
+            .setRenderersFactory(
+                DefaultRenderersFactory(ctx).setExtensionRendererMode(
+                    DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON
+                )
+            )
             .setSeekBackIncrementMs(10_000)
             .setSeekForwardIncrementMs(30_000)
             .setMediaSourceFactory(DefaultMediaSourceFactory(http, extractors))

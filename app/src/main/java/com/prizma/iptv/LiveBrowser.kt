@@ -62,6 +62,7 @@ import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.extractor.DefaultExtractorsFactory
@@ -393,6 +394,13 @@ private fun rememberPreviewPlayer(): ExoPlayer {
             .setTsExtractorFlags(DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS)
 
         ExoPlayer.Builder(ctx)
+            // Önizlemede de aynı çözücü havuzu kullanılsın; yoksa aynı kanal
+            // önizlemede sessiz, tam ekranda sesli olurdu.
+            .setRenderersFactory(
+                DefaultRenderersFactory(ctx).setExtensionRendererMode(
+                    DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON
+                )
+            )
             .setLoadControl(
                 DefaultLoadControl.Builder()
                     .setBufferDurationsMs(2000, 8000, 800, 1500)
