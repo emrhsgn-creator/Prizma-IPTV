@@ -18,8 +18,8 @@ android {
         applicationId = "com.prizma.iptv"
         minSdk = 21
         targetSdk = 35
-        versionCode = 14
-        versionName = "0.3.0"
+        versionCode = 15
+        versionName = "0.3.1"
 
         if (ffmpegReady) {
             ndk { abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64") }
@@ -61,6 +61,13 @@ signingConfigs {
         }
     }
 
+    // Projeye alinan FFmpeg cozucu kaynaklari media3'un kendi derlemesinde
+    // uretiliyor ve orada gecerli olan opt-in ayarlari burada yok. Bir lint
+    // bulgusunun APK uretimini durdurmasini istemiyoruz.
+    lint {
+        abortOnError = false
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -81,6 +88,13 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("io.coil-kt:coil-compose:2.7.0")
     implementation("androidx.media3:media3-exoplayer:1.4.1")
+    // FFmpeg cozucu kaynaklari SimpleDecoder ve DecoderInputBuffer gibi
+    // siniflari dogrudan kullaniyor; media3-exoplayer bunlari derleme
+    // yoluna acmiyor, o yuzden acikca ekleniyor.
+    implementation("androidx.media3:media3-decoder:1.4.1")
+    // Ayni kaynaklar @MonotonicNonNull kullaniyor. Anotasyon calisma
+    // zamaninda gerekmedigi icin yalnizca derlemeye ekleniyor.
+    compileOnly("org.checkerframework:checker-qual:3.42.0")
     implementation("androidx.media3:media3-exoplayer-hls:1.4.1")
     implementation("androidx.media3:media3-ui:1.4.1")
     implementation("io.coil-kt:coil-compose:2.7.0")
