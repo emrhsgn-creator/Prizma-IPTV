@@ -29,25 +29,22 @@ jobs:
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
             "ndk;26.1.10909125" "cmake;3.22.1"
 
-      - name: FFmpeg kaynagini al
+      # Tum ffmpeg agaci onbellege alinir, yalnizca derlenmis kitapliklar degil.
+      # JNI derlemesi configure'un urettigi libavutil/avconfig.h basligina da
+      # ihtiyac duyuyor; sadece .a dosyalarini onbelleklemek yetmiyordu.
+      - name: FFmpeg onbellegi
+        id: ffmpeg-cache
+        uses: actions/cache@v4
+        with:
+          path: app/src/main/jni/ffmpeg
+          key: ffmpeg-6.0-ndk26.1-abi21-audio-v2
+
+      - name: FFmpeg kaynagini al ve derle
+        if: steps.ffmpeg-cache.outputs.cache-hit != 'true'
         run: |
           set -eu
           git clone --depth 1 --branch release/6.0 \
             https://github.com/FFmpeg/FFmpeg.git app/src/main/jni/ffmpeg
-
-      # Derlenmis kitapliklar onbellege alinir; ilk derleme uzun surer,
-      # sonrakiler dogrudan buradan gelir.
-      - name: FFmpeg kitapliklari onbellegi
-        id: ffmpeg-cache
-        uses: actions/cache@v4
-        with:
-          path: app/src/main/jni/ffmpeg/android-libs
-          key: ffmpeg-6.0-ndk26.1-abi21-audio-v1
-
-      - name: FFmpeg derle
-        if: steps.ffmpeg-cache.outputs.cache-hit != 'true'
-        run: |
-          set -eu
           FFMPEG_MODULE_PATH="$(pwd)/app/src/main"
           NDK_PATH="$ANDROID_HOME/ndk/26.1.10909125"
           HOST_PLATFORM="linux-x86_64"
@@ -64,6 +61,7 @@ jobs:
           ./build_ffmpeg.sh \
             "${FFMPEG_MODULE_PATH}" "${NDK_PATH}" "${HOST_PLATFORM}" \
             "${ANDROID_ABI}" "${ENABLED_DECODERS[@]}"
+          rm -rf "${FFMPEG_MODULE_PATH}/jni/ffmpeg/.git"
 
       - name: FFmpeg kitapliklarini dogrula
         run: |
@@ -74,7 +72,9 @@ jobs:
               test -s "$f" || { echo "EKSIK: $f"; exit 1; }
             done
           done
-          echo "Dort mimari icin de FFmpeg kitapliklari hazir."
+          test -s "app/src/main/jni/ffmpeg/libavutil/avconfig.h" \
+            || { echo "EKSIK: libavutil/avconfig.h (configure calismamis)"; exit 1; }
+          echo "Dort mimari icin kitapliklar ve uretilen basliklar hazir."
 
       - name: Imza anahtarini yaz
         env:
