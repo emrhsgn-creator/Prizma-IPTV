@@ -3,7 +3,12 @@ package com.prizma.iptv
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.animation.AnimatorInflater
 import android.view.KeyEvent
+import android.view.View
+import android.view.ViewGroup
+import android.widget.ImageView
+import android.widget.TextView
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -61,6 +66,7 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
@@ -90,6 +96,39 @@ private data class TrackOption(
     val trackIndex: Int,
     val selected: Boolean
 )
+
+/**
+ * Kontrol çubuğundaki odaklanabilir her görünüme yüksek kontrastlı vurgu ve
+ * büyüme uygular.
+ *
+ * Tema üzerinden android:selectableItemBackground'u değiştirmek yeterince
+ * belirgin olmadı. Burada doğrudan görünümlere yazıyoruz; media3'un stil
+ * isimlerine bağlı kalmadığı için sürüm değişse de çalışır.
+ */
+private fun applyTvFocusHighlight(view: View, isRoot: Boolean = true) {
+    if (view is ViewGroup) {
+        for (i in 0 until view.childCount) applyTvFocusHighlight(view.getChildAt(i), false)
+    }
+    // Kök PlayerView'in kendisi de odaklanabilir; ona vurgu koyarsak tüm
+    // görüntünün üstüne renkli bir kutu çizilir.
+    if (isRoot || !view.isFocusable) return
+
+    // setBackground, çizilebilirin dolgusunu görünüme uygular ve mevcut dolguyu
+    // sıfırlar; düğmelerin ikon boşluklarını korumak için yedekliyoruz.
+    val l = view.paddingLeft
+    val t = view.paddingTop
+    val r = view.paddingRight
+    val b = view.paddingBottom
+    view.background = ContextCompat.getDrawable(view.context, R.drawable.tv_focus)
+    view.setPadding(l, t, r, b)
+
+    // Büyüme yalnızca düğmelere; ilerleme çubuğu tam genişlikte olduğu için
+    // büyütülünce taşıyor.
+    if (view is ImageView || view is TextView) {
+        view.stateListAnimator =
+            AnimatorInflater.loadStateListAnimator(view.context, R.animator.tv_focus_scale)
+    }
+}
 
 object PlayerBus {
     var onKey: ((Int) -> Boolean)? = null
@@ -480,9 +519,14 @@ fun PlayerScreen(
                     )
                     setControllerVisibilityListener(
                         PlayerView.ControllerVisibilityListener { vis ->
-                            barVisible = vis == android.view.View.VISIBLE
+                            barVisible = vis == View.VISIBLE
+                            // Çubuk ilk göründüğünde bazı görünümler henüz
+                            // oluşturulmamış olabiliyor; her açılışta tekrar
+                            // uyguluyoruz.
+                            if (barVisible) applyTvFocusHighlight(this)
                         }
                     )
+                    applyTvFocusHighlight(this)
                     viewRef = this
                 }
             },

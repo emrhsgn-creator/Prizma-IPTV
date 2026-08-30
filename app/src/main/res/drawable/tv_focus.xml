@@ -1,20 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Kumandayla gezerken odağın nerede olduğu belli olsun diye yüksek kontrastlı
-  vurgu. Varsayılan ripple, televizyonda uzaktan bakınca neredeyse görünmüyor.
+  Televizyonda uzaktan bakildiginda odagin nerede oldugu hemen anlasilsin diye
+  yuksek kontrastli vurgu: dolu mavi zemin ve kalin beyaz cerceve.
 -->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:state_focused="true">
         <shape android:shape="rectangle">
-            <solid android:color="#B34F8DF7" />
-            <stroke android:width="2dp" android:color="#FFFFFFFF" />
-            <corners android:radius="6dp" />
+            <solid android:color="#FF2F6FE0" />
+            <stroke android:width="3dp" android:color="#FFFFFFFF" />
+            <corners android:radius="8dp" />
         </shape>
     </item>
     <item android:state_pressed="true">
         <shape android:shape="rectangle">
-            <solid android:color="#804F8DF7" />
-            <corners android:radius="6dp" />
+            <solid android:color="#FF1E4FA8" />
+            <stroke android:width="3dp" android:color="#FFFFFFFF" />
+            <corners android:radius="8dp" />
         </shape>
     </item>
     <item>

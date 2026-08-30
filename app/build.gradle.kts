@@ -18,8 +18,8 @@ android {
         applicationId = "com.prizma.iptv"
         minSdk = 21
         targetSdk = 35
-        versionCode = 15
-        versionName = "0.3.1"
+        versionCode = 16
+        versionName = "0.3.2"
 
         if (ffmpegReady) {
             ndk { abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64") }
