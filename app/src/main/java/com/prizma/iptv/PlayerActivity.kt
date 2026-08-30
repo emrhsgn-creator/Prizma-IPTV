@@ -61,6 +61,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
@@ -76,6 +77,7 @@ import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
@@ -210,6 +212,24 @@ class PlayerActivity : ComponentActivity() {
     }
 }
 
+// Kanal neden açılmadığını ayırt edebilmek için hata kodunun yanında
+// sunucunun döndürdüğü HTTP durumunu ve asıl istisnayı da gösteriyoruz:
+// HTTP 403/401 sunucu reddi, DECODING/PARSING ise çözücü ya da kap sorunu.
+@OptIn(UnstableApi::class)
+private fun errorDetail(e: PlaybackException): String {
+    val cause = e.cause
+    val extra = when {
+        cause is HttpDataSource.InvalidResponseCodeException -> "HTTP ${cause.responseCode}"
+        cause != null -> {
+            val m = cause.message?.trim().orEmpty()
+            if (m.isEmpty()) cause.javaClass.simpleName
+            else "${cause.javaClass.simpleName}: ${m.take(140)}"
+        }
+        else -> ""
+    }
+    return if (extra.isEmpty()) e.errorCodeName else "${e.errorCodeName} · $extra"
+}
+
 @OptIn(UnstableApi::class)
 private fun collectTracks(tracks: Tracks, type: Int): List<TrackOption> {
     val out = ArrayList<TrackOption>()
@@ -224,14 +244,22 @@ private fun collectTracks(tracks: Tracks, type: Int): List<TrackOption> {
                     !lang.isNullOrBlank() && lang != "und" ->
                         Locale(lang).getDisplayLanguage(Locale.getDefault())
                             .replaceFirstChar { it.uppercase() }
+                    type == C.TRACK_TYPE_VIDEO -> "Görüntü ${ti + 1}"
                     else -> "Kanal ${ti + 1}"
                 }
-                // Codec ve destek bilgisi teşhis için: cihaz bir ses biçimini
-                // (örneğin AC3) çözemiyorsa iz listede görünür ama sesi çıkmaz.
+                // Codec ve destek bilgisi teşhis için: cihaz bir ses ya da
+                // görüntü biçimini (örneğin MPEG Layer II, MPEG-2 video)
+                // çözemiyorsa iz listede görünür ama oynatılamaz.
                 val extra = buildString {
-                    if (type == C.TRACK_TYPE_AUDIO) {
-                        if (f.channelCount > 0) append(" · ${f.channelCount}ch")
-                        f.sampleMimeType?.substringAfter('/')?.let { append(" · $it") }
+                    when (type) {
+                        C.TRACK_TYPE_AUDIO -> {
+                            if (f.channelCount > 0) append(" · ${f.channelCount}ch")
+                            f.sampleMimeType?.substringAfter('/')?.let { append(" · $it") }
+                        }
+                        C.TRACK_TYPE_VIDEO -> {
+                            if (f.width > 0 && f.height > 0) append(" · ${f.width}x${f.height}")
+                            f.sampleMimeType?.substringAfter('/')?.let { append(" · $it") }
+                        }
                     }
                     if (!group.isTrackSupported(ti)) append(" · desteklenmiyor")
                 }
@@ -434,18 +462,23 @@ fun PlayerScreen(
                 if (live && url.endsWith(".ts") && !triedFallback) {
                     triedFallback = true
                     val alt = url.removeSuffix(".ts") + ".m3u8"
-                    player.setMediaItem(MediaItem.fromUri(alt))
+                    // setMediaItem tüm listeyi tek öğeye indiriyordu: sonrasında
+                    // yukarı/aşağı ile kanal değiştirilemiyor, başlıklar kayıyordu.
+                    // replaceMediaItem yalnızca bu kanalı değiştirir.
+                    player.replaceMediaItem(i, MediaItem.fromUri(alt))
                     player.prepare()
                     player.playWhenReady = true
                     notice = "Alternatif format deneniyor"
                 } else {
-                    error = "Oynatılamadı (${e.errorCodeName})"
+                    error = "Oynatılamadı: ${errorDetail(e)}"
                 }
             }
 
             override fun onTracksChanged(t: Tracks) {
                 tracks = t
-                error = ""
+                // Hata sonrası boş iz listesi de geliyor; onunla hata mesajını
+                // silersek kullanıcı nedeni hiç göremiyor.
+                if (t.groups.isNotEmpty()) error = ""
             }
 
             override fun onMediaItemTransition(item: MediaItem?, reason: Int) {
@@ -626,7 +659,11 @@ fun PlayerScreen(
                 error,
                 color = Color(0xFFFF6B6B),
                 fontSize = 14.sp,
-                modifier = Modifier.align(Alignment.Center)
+                textAlign = TextAlign.Center,
+                lineHeight = 20.sp,
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .fillMaxWidth(0.8f)
             )
         }
 
@@ -812,6 +849,9 @@ private fun SettingsPanel(
     val subs = remember(tracks) {
         tracks?.let { collectTracks(it, C.TRACK_TYPE_TEXT) }.orEmpty()
     }
+    val video = remember(tracks) {
+        tracks?.let { collectTracks(it, C.TRACK_TYPE_VIDEO) }.orEmpty()
+    }
     val subsOff = remember(tracks) { subs.none { it.selected } }
 
     fun applyTrack(type: Int, opt: TrackOption?) {
@@ -891,6 +931,14 @@ private fun SettingsPanel(
 
             Spacer(Modifier.height(14.dp))
             GroupTitle("Görüntü")
+            if (video.isEmpty()) {
+                Text("Görüntü izi bulunamadı", color = Color(0xFF6E7686), fontSize = 12.sp)
+            } else {
+                video.forEach { v ->
+                    Text(v.label, color = Color(0xFFC3C8D4), fontSize = 11.sp)
+                }
+            }
+            Spacer(Modifier.height(6.dp))
             OptRow("En-boy oranı: $resizeLabel", false) { onResize() }
 
             if (hasList) {
