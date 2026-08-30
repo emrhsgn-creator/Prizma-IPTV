@@ -44,7 +44,6 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -81,7 +80,6 @@ import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.PlayerView
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Locale
 
@@ -91,9 +89,6 @@ private data class TrackOption(
     val trackIndex: Int,
     val selected: Boolean
 )
-
-/** Canlı yayında kopma sonrası kaç kez yeniden bağlanmayı deneyeceği. */
-private const val LIVE_RETRY_LIMIT = 3
 
 object PlayerBus {
     var onKey: ((Int) -> Boolean)? = null
@@ -235,8 +230,6 @@ fun PlayerScreen(
     var viewRef by remember { mutableStateOf<PlayerView?>(null) }
     var barVisible by remember { mutableStateOf(true) }
     var triedFallback by remember { mutableStateOf(false) }
-    var retries by remember { mutableIntStateOf(0) }
-    val scope = rememberCoroutineScope()
 
     val live = section == Section.LIVE.name
     val hasList = urls.size > 1
@@ -388,35 +381,21 @@ fun PlayerScreen(
             override fun onPlayerError(e: PlaybackException) {
                 val i = player.currentMediaItemIndex
                 val url = urls.getOrNull(i).orEmpty()
-                when {
-                    live && url.endsWith(".ts") && !triedFallback -> {
-                        triedFallback = true
-                        val alt = url.removeSuffix(".ts") + ".m3u8"
-                        player.setMediaItem(MediaItem.fromUri(alt))
-                        player.prepare()
-                        player.playWhenReady = true
-                        notice = "Alternatif format deneniyor"
-                    }
-
-                    // Canlı yayında kısa bir kopma kalıcı hata sayılmasın.
-                    live && retries < LIVE_RETRY_LIMIT -> {
-                        retries++
-                        notice = "Bağlantı koptu, yeniden deneniyor ($retries)"
-                        scope.launch {
-                            delay(1000L * retries)
-                            player.prepare()
-                            player.playWhenReady = true
-                        }
-                    }
-
-                    else -> error = "Oynatılamadı (${e.errorCodeName})"
+                if (live && url.endsWith(".ts") && !triedFallback) {
+                    triedFallback = true
+                    val alt = url.removeSuffix(".ts") + ".m3u8"
+                    player.setMediaItem(MediaItem.fromUri(alt))
+                    player.prepare()
+                    player.playWhenReady = true
+                    notice = "Alternatif format deneniyor"
+                } else {
+                    error = "Oynatılamadı (${e.errorCodeName})"
                 }
             }
 
             override fun onTracksChanged(t: Tracks) {
                 tracks = t
                 error = ""
-                retries = 0
             }
 
             override fun onMediaItemTransition(item: MediaItem?, reason: Int) {
@@ -424,7 +403,6 @@ fun PlayerScreen(
                 current = i
                 error = ""
                 triedFallback = false
-                retries = 0
                 if (reason != Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT && hasList) {
                     notice = titleAt(i)
                 }

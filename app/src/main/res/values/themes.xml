@@ -3,5 +3,13 @@
     <style name="Theme.Prizma" parent="android:Theme.Material.NoActionBar">
         <item name="android:windowBackground">#FF101014</item>
         <item name="android:statusBarColor">#FF101014</item>
+        <!--
+          Oynatıcı kontrol çubuğunun düğmeleri arka planı bu nitelikten alıyor.
+          Varsayılan ripple televizyonda odağı belli etmiyordu; yüksek kontrastlı
+          bir seçici ile değiştiriyoruz. Kütüphane stillerini yeniden tanımlamak
+          yerine nitelik üzerinden gitmek, düğmelerin boyut ve dolgu ayarlarını
+          bozmuyor.
+        -->
+        <item name="android:selectableItemBackground">@drawable/tv_focus</item>
     </style>
 </resources>
