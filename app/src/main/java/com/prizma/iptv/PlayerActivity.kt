@@ -3,6 +3,7 @@ package com.prizma.iptv
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.os.SystemClock
 import android.animation.AnimatorInflater
 import android.view.KeyEvent
 import android.view.View
@@ -47,6 +48,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -60,6 +62,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -82,6 +85,7 @@ import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.exoplayer.upstream.DefaultBandwidthMeter
 import androidx.media3.extractor.DefaultExtractorsFactory
 import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
 import androidx.media3.ui.AspectRatioFrameLayout
@@ -298,6 +302,8 @@ fun PlayerScreen(
     var viewRef by remember { mutableStateOf<PlayerView?>(null) }
     var barVisible by remember { mutableStateOf(true) }
     var triedFallback by remember { mutableStateOf(false) }
+    val stats = remember { StallStats() }
+    var diag by remember { mutableStateOf(Prefs.diagnostics(ctx)) }
 
     val live = section == Section.LIVE.name
     val hasList = urls.size > 1
@@ -474,6 +480,26 @@ fun PlayerScreen(
                 }
             }
 
+            // Donma sayimi tanilama katmani icin. Oynatici READY olduktan
+            // sonra tekrar BUFFERING'e dusmesi bir donmadir; ilk acilis degil.
+            override fun onPlaybackStateChanged(state: Int) {
+                when (state) {
+                    Player.STATE_BUFFERING ->
+                        if (stats.wasReady && stats.startedAt == 0L) {
+                            stats.count.intValue++
+                            stats.startedAt = SystemClock.elapsedRealtime()
+                        }
+                    Player.STATE_READY -> {
+                        if (stats.startedAt > 0L) {
+                            stats.totalMs.longValue +=
+                                SystemClock.elapsedRealtime() - stats.startedAt
+                            stats.startedAt = 0L
+                        }
+                        stats.wasReady = true
+                    }
+                }
+            }
+
             override fun onTracksChanged(t: Tracks) {
                 tracks = t
                 // Hata sonrası boş iz listesi de geliyor; onunla hata mesajını
@@ -486,6 +512,7 @@ fun PlayerScreen(
                 current = i
                 error = ""
                 triedFallback = false
+                stats.reset()
                 if (reason != Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT && hasList) {
                     notice = titleAt(i)
                 }
@@ -639,6 +666,12 @@ fun PlayerScreen(
             }
         }
 
+        if (diag) {
+            Box(Modifier.align(Alignment.TopStart)) {
+                DiagOverlay(player, stats, live)
+            }
+        }
+
         if (notice.isNotEmpty()) {
             Text(
                 notice,
@@ -693,6 +726,11 @@ fun PlayerScreen(
                 onSpeed = { speed = it },
                 onSubSize = { subSize = it },
                 onResize = { resizeIndex = (resizeIndex + 1) % resizeModes.size },
+                diag = diag,
+                onDiag = {
+                    diag = it
+                    Prefs.setDiagnostics(ctx, it)
+                },
                 onDismiss = { showMenu = false }
             )
         }
@@ -841,6 +879,8 @@ private fun SettingsPanel(
     onSpeed: (Float) -> Unit,
     onSubSize: (Float) -> Unit,
     onResize: () -> Unit,
+    diag: Boolean,
+    onDiag: (Boolean) -> Unit,
     onDismiss: () -> Unit
 ) {
     val audio = remember(tracks) {
@@ -959,6 +999,18 @@ private fun SettingsPanel(
                 }
             }
 
+            Spacer(Modifier.height(14.dp))
+            GroupTitle("Tanılama")
+            OptRow("Tanılama katmanı", diag) { onDiag(!diag) }
+            Text(
+                "Donma sayısı, arabellek doluluğu, ağ hızı ve düşen kareyi " +
+                    "ekranda gösterir. Donan bir kanalda açıp okursan sorunun " +
+                    "ağdan mı çözücüden mi geldiği belli olur.",
+                color = Color(0xFF6E7686),
+                fontSize = 10.sp,
+                lineHeight = 14.sp
+            )
+
             Spacer(Modifier.height(20.dp))
             Text(
                 "Geri tuşu paneli kapatır.",
@@ -967,6 +1019,100 @@ private fun SettingsPanel(
             )
         }
     }
+}
+
+/**
+ * Donma (rebuffer) sayaci. Kanal degistiginde sifirlanir; boylece ekrandaki
+ * sayilar hep izlenen kanala ait olur.
+ */
+private class StallStats {
+    val count = mutableIntStateOf(0)
+    val totalMs = mutableLongStateOf(0L)
+    var startedAt = 0L
+    var wasReady = false
+
+    fun reset() {
+        count.intValue = 0
+        totalMs.longValue = 0L
+        startedAt = 0L
+        wasReady = false
+    }
+}
+
+private fun fmt1(v: Double): String = String.format(Locale.US, "%.1f", v)
+
+/**
+ * Donmanin nedenini tahmin etmeden ayirt edebilmek icin oynaticinin canli
+ * olculerini ekrana yazar. Uc durum birbirinden net ayrilir:
+ *
+ *  - Arabellek donma aninda 0'a duserse: ag/sunucu yetismiyor.
+ *  - Arabellek doluyken donuyorsa ve dusen kare artiyorsa: cozucu yetismiyor.
+ *  - Arabellek ayarlanan degerin cok altinda takiliyorsa: bayt siniri baglayici.
+ */
+@OptIn(UnstableApi::class)
+@Composable
+private fun DiagOverlay(player: ExoPlayer, stats: StallStats, live: Boolean) {
+    val ctx = LocalContext.current
+    val bw = remember { DefaultBandwidthMeter.getSingletonInstance(ctx) }
+    var tick by remember { mutableIntStateOf(0) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(500)
+            tick++
+        }
+    }
+
+    val text = remember(tick) {
+        val v = player.videoFormat
+        val a = player.audioFormat
+        val dropped = player.videoDecoderCounters?.droppedBufferCount ?: 0
+        val durum = when (player.playbackState) {
+            Player.STATE_BUFFERING -> "ARABELLEK"
+            Player.STATE_READY -> if (player.isPlaying) "oynatiliyor" else "duraklatildi"
+            Player.STATE_IDLE -> "bosta"
+            else -> "bitti"
+        }
+        buildString {
+            appendLine("TANILAMA  ·  arabellek ayari ${Prefs.bufferSeconds(ctx)} sn")
+            appendLine("Durum: $durum")
+            appendLine("Arabellek: ${fmt1(player.totalBufferedDuration / 1000.0)} sn")
+            appendLine("Ag hizi: ${fmt1(bw.bitrateEstimate / 1_000_000.0)} Mbps")
+            if (v != null) {
+                val res = if (v.width > 0) "${v.width}x${v.height}" else "?"
+                val fps = if (v.frameRate > 0f) " @${fmt1(v.frameRate.toDouble())}" else ""
+                val br = if (v.bitrate > 0) " ${fmt1(v.bitrate / 1_000_000.0)}Mbps" else ""
+                appendLine("Goruntu: ${v.sampleMimeType?.substringAfter('/') ?: "?"} $res$fps$br")
+            } else {
+                appendLine("Goruntu: yok")
+            }
+            if (a != null) {
+                val ch = if (a.channelCount > 0) " ${a.channelCount}ch" else ""
+                val sr = if (a.sampleRate > 0) " ${a.sampleRate / 1000}kHz" else ""
+                appendLine("Ses: ${a.sampleMimeType?.substringAfter('/') ?: "?"}$ch$sr")
+            } else {
+                appendLine("Ses: yok")
+            }
+            appendLine("Dusen kare: $dropped")
+            append("DONMA: ${stats.count.intValue} kez · ${fmt1(stats.totalMs.longValue / 1000.0)} sn")
+            if (live) {
+                val off = player.currentLiveOffset
+                if (off != C.TIME_UNSET) append("\nCanli sapma: ${fmt1(off / 1000.0)} sn")
+            }
+        }
+    }
+
+    Text(
+        text,
+        color = Color(0xFF8FE388),
+        fontSize = 11.sp,
+        lineHeight = 15.sp,
+        fontFamily = FontFamily.Monospace,
+        modifier = Modifier
+            .padding(top = 64.dp, start = 12.dp)
+            .clip(RoundedCornerShape(6.dp))
+            .background(Color(0xCC000000))
+            .padding(horizontal = 10.dp, vertical = 8.dp)
+    )
 }
 
 @Composable

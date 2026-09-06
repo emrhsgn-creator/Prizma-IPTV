@@ -16,6 +16,7 @@ object Prefs {
     private const val K_PROFILES = "profiles"
     private const val K_ACTIVE = "active"
     private const val K_BUFFER = "buffer"
+    private const val K_DIAG = "diag"
     private const val K_AUTONEXT = "autonext"
 
     private fun p(ctx: Context) = ctx.getSharedPreferences(FILE, Context.MODE_PRIVATE)
@@ -88,6 +89,12 @@ object Prefs {
 
     fun setBufferSeconds(ctx: Context, v: Int) {
         p(ctx).edit().putInt(K_BUFFER, v).apply()
+    }
+
+    fun diagnostics(ctx: Context): Boolean = p(ctx).getBoolean(K_DIAG, false)
+
+    fun setDiagnostics(ctx: Context, v: Boolean) {
+        p(ctx).edit().putBoolean(K_DIAG, v).apply()
     }
 
     fun autoNext(ctx: Context): Boolean = p(ctx).getBoolean(K_AUTONEXT, true)
