@@ -19,6 +19,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -55,11 +56,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -486,7 +489,7 @@ fun PlayerScreen(
                 when (state) {
                     Player.STATE_BUFFERING ->
                         if (stats.wasReady && stats.startedAt == 0L) {
-                            stats.count.intValue++
+                            stats.stalls.intValue++
                             stats.startedAt = SystemClock.elapsedRealtime()
                         }
                     Player.STATE_READY -> {
@@ -737,12 +740,41 @@ fun PlayerScreen(
     }
 }
 
+/**
+ * Compose ile cizilen oynatici denetimleri icin odak vurgusu.
+ *
+ * Kontrol cubugundaki R.drawable.tv_focus ile ayni gorunum: dolu mavi zemin,
+ * kalin beyaz kenarlik ve buyume. Vurgu yalnizca media3'un View tabanli
+ * cubuguna uygulanmisti; ust cubuk ve paneller Compose oldugu icin kumandayla
+ * imlecin nerede oldugu anlasilmiyordu.
+ *
+ * Zemini de bu degistirici ciziyor (clip + background), boylece secili durum
+ * ile odak ayni yerden gelir ve odak her zaman secili durumun uzerine biner.
+ */
+@Composable
+private fun Modifier.playerFocus(
+    shape: Shape,
+    base: Color,
+    scaleUp: Float = 1f
+): Modifier {
+    var focused by remember { mutableStateOf(false) }
+    return this
+        .onFocusChanged { focused = it.isFocused }
+        .scale(if (focused) scaleUp else 1f)
+        .border(
+            width = if (focused) 3.dp else 0.dp,
+            color = if (focused) Color.White else Color.Transparent,
+            shape = shape
+        )
+        .clip(shape)
+        .background(if (focused) Color(0xFF2F6FE0) else base)
+}
+
 @Composable
 private fun RoundBtn(label: String, size: TextUnit, onClick: () -> Unit) {
     Box(
         Modifier
-            .clip(CircleShape)
-            .background(Color(0x77000000))
+            .playerFocus(CircleShape, Color(0x77000000), scaleUp = 1.18f)
             .clickable(onClick = onClick)
             .size(38.dp),
         contentAlignment = Alignment.Center
@@ -834,9 +866,13 @@ private fun ChannelRow(
         modifier
             .fillMaxWidth()
             .onFocusChanged { focused = it.isFocused }
+            .border(
+                width = if (focused) 3.dp else 0.dp,
+                color = if (focused) Color.White else Color.Transparent
+            )
             .background(
                 when {
-                    focused -> Color(0x404F8DF7)
+                    focused -> Color(0xFF2F6FE0)
                     playing -> Color(0x264F8DF7)
                     else -> Color.Transparent
                 }
@@ -894,6 +930,14 @@ private fun SettingsPanel(
     }
     val subsOff = remember(tracks) { subs.none { it.selected } }
 
+    // Panel acildiginda odak oynaticida kaliyordu, bu yuzden kumandayla
+    // panelin icinde hic hareket edilemiyordu. Calisan kanal listesi
+    // panelinden tek farki buydu.
+    val firstFocus = remember { FocusRequester() }
+    LaunchedEffect(audio.isEmpty()) {
+        runCatching { firstFocus.requestFocus() }
+    }
+
     fun applyTrack(type: Int, opt: TrackOption?) {
         val t = tracks ?: return
         val b = player.trackSelectionParameters.buildUpon()
@@ -936,14 +980,22 @@ private fun SettingsPanel(
             if (audio.isEmpty()) {
                 Text("Ses kanalı bulunamadı", color = Color(0xFF6E7686), fontSize = 12.sp)
             } else {
-                audio.forEach { a ->
-                    OptRow(a.label, a.selected) { applyTrack(C.TRACK_TYPE_AUDIO, a) }
+                audio.forEachIndexed { i, a ->
+                    OptRow(
+                        a.label,
+                        a.selected,
+                        if (i == 0) Modifier.focusRequester(firstFocus) else Modifier
+                    ) { applyTrack(C.TRACK_TYPE_AUDIO, a) }
                 }
             }
 
             Spacer(Modifier.height(14.dp))
             GroupTitle("Altyazı")
-            OptRow("Kapalı", subsOff) { applyTrack(C.TRACK_TYPE_TEXT, null) }
+            OptRow(
+                "Kapalı",
+                subsOff,
+                if (audio.isEmpty()) Modifier.focusRequester(firstFocus) else Modifier
+            ) { applyTrack(C.TRACK_TYPE_TEXT, null) }
             subs.forEach { s ->
                 OptRow(s.label, s.selected) { applyTrack(C.TRACK_TYPE_TEXT, s) }
             }
@@ -1026,13 +1078,13 @@ private fun SettingsPanel(
  * sayilar hep izlenen kanala ait olur.
  */
 private class StallStats {
-    val count = mutableIntStateOf(0)
+    val stalls = mutableIntStateOf(0)
     val totalMs = mutableLongStateOf(0L)
     var startedAt = 0L
     var wasReady = false
 
     fun reset() {
-        count.intValue = 0
+        stalls.intValue = 0
         totalMs.longValue = 0L
         startedAt = 0L
         wasReady = false
@@ -1093,7 +1145,7 @@ private fun DiagOverlay(player: ExoPlayer, stats: StallStats, live: Boolean) {
                 appendLine("Ses: yok")
             }
             appendLine("Dusen kare: $dropped")
-            append("DONMA: ${stats.count.intValue} kez · ${fmt1(stats.totalMs.longValue / 1000.0)} sn")
+            append("DONMA: ${stats.stalls.intValue} kez · ${fmt1(stats.totalMs.longValue / 1000.0)} sn")
             if (live) {
                 val off = player.currentLiveOffset
                 if (off != C.TIME_UNSET) append("\nCanli sapma: ${fmt1(off / 1000.0)} sn")
@@ -1122,12 +1174,19 @@ private fun GroupTitle(t: String) {
 }
 
 @Composable
-private fun OptRow(label: String, selected: Boolean, onClick: () -> Unit) {
+private fun OptRow(
+    label: String,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
     Row(
-        Modifier
+        modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(6.dp))
-            .background(if (selected) Color(0x334F8DF7) else Color.Transparent)
+            .playerFocus(
+                RoundedCornerShape(6.dp),
+                if (selected) Color(0x334F8DF7) else Color.Transparent
+            )
             .clickable(onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -1151,8 +1210,11 @@ private fun Pill(label: String, selected: Boolean, onClick: () -> Unit) {
         color = if (selected) Color.White else Color(0xFFC3C8D4),
         fontSize = 11.sp,
         modifier = Modifier
-            .clip(RoundedCornerShape(14.dp))
-            .background(if (selected) PrizmaAccent.copy(alpha = 0.4f) else Color(0xFF23242E))
+            .playerFocus(
+                RoundedCornerShape(14.dp),
+                if (selected) PrizmaAccent.copy(alpha = 0.4f) else Color(0xFF23242E),
+                scaleUp = 1.12f
+            )
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 7.dp)
     )
