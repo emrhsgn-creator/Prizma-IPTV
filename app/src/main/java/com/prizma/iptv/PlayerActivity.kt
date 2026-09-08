@@ -86,8 +86,11 @@ import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
+import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.exoplayer.source.LoadEventInfo
+import androidx.media3.exoplayer.source.MediaLoadData
 import androidx.media3.exoplayer.upstream.DefaultBandwidthMeter
 import androidx.media3.extractor.DefaultExtractorsFactory
 import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
@@ -97,6 +100,7 @@ import androidx.media3.ui.PlayerView
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import java.io.IOException
 import java.util.Locale
 
 private data class TrackOption(
@@ -521,6 +525,29 @@ fun PlayerScreen(
                 }
             }
         }
+        val analytics = object : AnalyticsListener {
+            override fun onLoadError(
+                eventTime: AnalyticsListener.EventTime,
+                loadEventInfo: LoadEventInfo,
+                mediaLoadData: MediaLoadData,
+                error: IOException,
+                wasCanceled: Boolean
+            ) {
+                stats.loadErrors.intValue++
+                val msg = error.message.orEmpty().take(40)
+                stats.lastError.value =
+                    error.javaClass.simpleName + (if (msg.isEmpty()) "" else " $msg")
+            }
+
+            override fun onLoadCompleted(
+                eventTime: AnalyticsListener.EventTime,
+                loadEventInfo: LoadEventInfo,
+                mediaLoadData: MediaLoadData
+            ) {
+                stats.bytes.longValue += loadEventInfo.bytesLoaded
+            }
+        }
+        player.addAnalyticsListener(analytics)
         player.addListener(listener)
         onDispose {
             val i = player.currentMediaItemIndex
@@ -531,6 +558,7 @@ fun PlayerScreen(
                     player.currentPosition, d
                 )
             }
+            player.removeAnalyticsListener(analytics)
             player.removeListener(listener)
             player.release()
         }
@@ -1080,12 +1108,23 @@ private fun SettingsPanel(
 private class StallStats {
     val stalls = mutableIntStateOf(0)
     val totalMs = mutableLongStateOf(0L)
+
+    // Donmanin kaynagini ayirmak icin: baglanti kopuyorsa yukleme hatasi
+    // sayaci donma sayisiyla birlikte artar. Hic artmiyorsa veri geliyor
+    // ama yeterince hizli gelmiyor demektir.
+    val loadErrors = mutableIntStateOf(0)
+    val lastError = mutableStateOf("")
+    val bytes = mutableLongStateOf(0L)
+
     var startedAt = 0L
     var wasReady = false
 
     fun reset() {
         stalls.intValue = 0
         totalMs.longValue = 0L
+        loadErrors.intValue = 0
+        lastError.value = ""
+        bytes.longValue = 0L
         startedAt = 0L
         wasReady = false
     }
@@ -1145,6 +1184,16 @@ private fun DiagOverlay(player: ExoPlayer, stats: StallStats, live: Boolean) {
                 appendLine("Ses: yok")
             }
             appendLine("Dusen kare: $dropped")
+            appendLine(
+                "Yukleme hatasi: ${stats.loadErrors.intValue}" +
+                    " · ${stats.bytes.longValue / 1_000_000} MB"
+            )
+            val le = stats.lastError.value
+            if (le.isNotEmpty()) appendLine("Son hata: $le")
+            player.currentMediaItem?.localConfiguration?.uri?.lastPathSegment
+                ?.substringAfterLast('.', "")
+                ?.takeIf { it.isNotEmpty() }
+                ?.let { appendLine("Bicim: $it") }
             append("DONMA: ${stats.stalls.intValue} kez · ${fmt1(stats.totalMs.longValue / 1000.0)} sn")
             if (live) {
                 val off = player.currentLiveOffset
