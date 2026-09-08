@@ -82,7 +82,10 @@ import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DataSource
+import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.TransferListener
 import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
@@ -101,7 +104,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.io.IOException
+import java.util.concurrent.atomic.AtomicLong
 import java.util.Locale
+
+/** Canli yayinda donmadan sonra oynatmanin devam etmesi icin gereken arabellek. */
+private const val LIVE_RESUME_MS = 10000
 
 private data class TrackOption(
     val label: String,
@@ -335,14 +342,53 @@ fun PlayerScreen(
             .setAllowCrossProtocolRedirects(true)
             .setConnectTimeoutMs(15000)
             .setReadTimeoutMs(20000)
+            .setTransferListener(object : TransferListener {
+                override fun onTransferInitializing(
+                    source: DataSource,
+                    dataSpec: DataSpec,
+                    isNetwork: Boolean
+                ) = Unit
+
+                override fun onTransferStart(
+                    source: DataSource,
+                    dataSpec: DataSpec,
+                    isNetwork: Boolean
+                ) = Unit
+
+                override fun onBytesTransferred(
+                    source: DataSource,
+                    dataSpec: DataSpec,
+                    isNetwork: Boolean,
+                    bytesTransferred: Int
+                ) {
+                    if (stats.firstByteAt == 0L) {
+                        stats.firstByteAt = SystemClock.elapsedRealtime()
+                    }
+                    stats.bytes.addAndGet(bytesTransferred.toLong())
+                }
+
+                override fun onTransferEnd(
+                    source: DataSource,
+                    dataSpec: DataSpec,
+                    isNetwork: Boolean
+                ) = Unit
+            })
 
         val extractors = DefaultExtractorsFactory()
             .setTsExtractorFlags(DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS)
             .setTsExtractorTimestampSearchBytes(1500 * 188)
 
         val sec = Prefs.bufferSeconds(ctx)
+        // Olculen desen: arabellek sifira iniyor, oynatici yalnizca 3 saniye
+        // birikince devam ediyor ve kisa surede yine kuruyor. Dort donmanin
+        // yalnizca birinde baglanti hatasi vardi, yani sorun kopma degil,
+        // besleme hizinin yayin bit hizina cok yakin olmasi. Canli yayinda
+        // devam esigini yukseltmek, cok sayida kisa donma yerine daha az ama
+        // sonrasi daha dayanikli bir bekleme birakiyor. Yalnizca ne zaman
+        // devam edilecegini degistirir; cozucu ve kaynak yoluna dokunmaz.
+        val resumeMs = if (live) LIVE_RESUME_MS else 3000
         val loadControl = DefaultLoadControl.Builder()
-            .setBufferDurationsMs(sec * 1000, sec * 2000, 1500, 3000)
+            .setBufferDurationsMs(sec * 1000, sec * 2000, 1500, resumeMs)
             .build()
 
         ExoPlayer.Builder(ctx)
@@ -537,14 +583,6 @@ fun PlayerScreen(
                 val msg = error.message.orEmpty().take(40)
                 stats.lastError.value =
                     error.javaClass.simpleName + (if (msg.isEmpty()) "" else " $msg")
-            }
-
-            override fun onLoadCompleted(
-                eventTime: AnalyticsListener.EventTime,
-                loadEventInfo: LoadEventInfo,
-                mediaLoadData: MediaLoadData
-            ) {
-                stats.bytes.longValue += loadEventInfo.bytesLoaded
             }
         }
         player.addAnalyticsListener(analytics)
@@ -1114,7 +1152,15 @@ private class StallStats {
     // ama yeterince hizli gelmiyor demektir.
     val loadErrors = mutableIntStateOf(0)
     val lastError = mutableStateOf("")
-    val bytes = mutableLongStateOf(0L)
+
+    // Yukleme is parcacigindan yazildigi icin Compose durumu degil atomik
+    // sayac. Ilk bayt zamaniyla birlikte ortalama gercek hizi verir; bu,
+    // yayinin kendi bit hizini olcmenin tek yolu (TS akisinda Format.bitrate
+    // bos geliyor).
+    val bytes = AtomicLong(0L)
+
+    @Volatile
+    var firstByteAt = 0L
 
     var startedAt = 0L
     var wasReady = false
@@ -1124,7 +1170,8 @@ private class StallStats {
         totalMs.longValue = 0L
         loadErrors.intValue = 0
         lastError.value = ""
-        bytes.longValue = 0L
+        bytes.set(0L)
+        firstByteAt = 0L
         startedAt = 0L
         wasReady = false
     }
@@ -1184,9 +1231,17 @@ private fun DiagOverlay(player: ExoPlayer, stats: StallStats, live: Boolean) {
                 appendLine("Ses: yok")
             }
             appendLine("Dusen kare: $dropped")
+            val mb = stats.bytes.get() / 1_000_000
+            val secs = if (stats.firstByteAt > 0L) {
+                (SystemClock.elapsedRealtime() - stats.firstByteAt) / 1000.0
+            } else {
+                0.0
+            }
+            val avg = if (secs > 1.0) stats.bytes.get() * 8.0 / secs / 1_000_000 else 0.0
+            appendLine("Indirilen: $mb MB · ort ${fmt1(avg)} Mbps")
             appendLine(
                 "Yukleme hatasi: ${stats.loadErrors.intValue}" +
-                    " · ${stats.bytes.longValue / 1_000_000} MB"
+                    (if (live) " · devam esigi ${LIVE_RESUME_MS / 1000} sn" else "")
             )
             val le = stats.lastError.value
             if (le.isNotEmpty()) appendLine("Son hata: $le")
