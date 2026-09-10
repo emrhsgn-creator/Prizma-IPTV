@@ -364,6 +364,7 @@ fun PlayerScreen(
     val stats = remember { StallStats() }
     var diag by remember { mutableStateOf(Prefs.diagnostics(ctx)) }
     var hls by remember { mutableStateOf(Prefs.liveHls(ctx)) }
+    var offsetSec by remember { mutableIntStateOf(Prefs.liveOffsetSeconds(ctx)) }
 
     val live = section == Section.LIVE.name
     val hasList = urls.size > 1
@@ -469,7 +470,27 @@ fun PlayerScreen(
                 }
             )
             .build().apply {
-                setMediaItems(urls.map { MediaItem.fromUri(it) })
+                // Hedef gecikme yalnizca canli kaynaklarda anlamli; ExoPlayer
+                // oynatma hizini gorunmez olcude ayarlayarak bu degere yakinsar.
+                // 0 secildiginde hic uygulanmaz, yani oynaticinin kendi secimi
+                // korunur.
+                val offsetSec = Prefs.liveOffsetSeconds(ctx)
+                setMediaItems(
+                    urls.map { u ->
+                        if (live && offsetSec > 0) {
+                            MediaItem.Builder()
+                                .setUri(u)
+                                .setLiveConfiguration(
+                                    MediaItem.LiveConfiguration.Builder()
+                                        .setTargetOffsetMs(offsetSec * 1000L)
+                                        .build()
+                                )
+                                .build()
+                        } else {
+                            MediaItem.fromUri(u)
+                        }
+                    }
+                )
                 playWhenReady = true
                 if (!Prefs.autoNext(ctx) && !live) {
                     repeatMode = Player.REPEAT_MODE_ONE
@@ -872,6 +893,12 @@ fun PlayerScreen(
                     Prefs.setLiveHls(ctx, it)
                     notice = "Sonraki kanal açılışında geçerli"
                 },
+                offsetSec = offsetSec,
+                onOffset = {
+                    offsetSec = it
+                    Prefs.setLiveOffsetSeconds(ctx, it)
+                    notice = "Sonraki kanal açılışında geçerli"
+                },
                 onDismiss = { showMenu = false }
             )
         }
@@ -1057,6 +1084,8 @@ private fun SettingsPanel(
     onDiag: (Boolean) -> Unit,
     hls: Boolean,
     onHls: (Boolean) -> Unit,
+    offsetSec: Int,
+    onOffset: (Int) -> Unit,
     onDismiss: () -> Unit
 ) {
     val audio = remember(tracks) {
@@ -1194,16 +1223,40 @@ private fun SettingsPanel(
             if (live) {
                 Spacer(Modifier.height(14.dp))
                 GroupTitle("Canlı yayın kaynağı")
-                OptRow("TS (varsayılan)", !hls) { onHls(false) }
-                OptRow("HLS (m3u8)", hls) { onHls(true) }
+                OptRow("HLS (m3u8) · varsayılan", hls) { onHls(true) }
+                OptRow("TS", !hls) { onHls(false) }
                 Text(
-                    "TS tek sürekli bağlantıdır; bağlantı her koptuğunda yeniden " +
-                        "açılırken küçük bir geri sıçrama olur. HLS ayrı parçalar " +
-                        "indirir, bu sıçrama yaşanmaz. Sonraki kanal açılışında geçerli.",
+                    "TS tek sürekli bağlantıdır: oynatıcı canlı ucun hemen " +
+                        "arkasında kalır, elinde yastık olmadığı için sunucunun " +
+                        "her duraklaması donma olur. HLS parçaları ileriden " +
+                        "indirir, donmayı bu önler. Bedeli canlı yayının biraz " +
+                        "geriden gelmesidir.",
                     color = Color(0xFF6E7686),
                     fontSize = 10.sp,
                     lineHeight = 14.sp
                 )
+
+                if (hls) {
+                    Spacer(Modifier.height(10.dp))
+                    GroupTitle("Canlı gecikme")
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf(
+                            0 to "Otomatik",
+                            10 to "10 sn",
+                            20 to "20 sn",
+                            30 to "30 sn"
+                        ).forEach { (v, label) ->
+                            Pill(label, offsetSec == v) { onOffset(v) }
+                        }
+                    }
+                    Text(
+                        "Düşürdüğün her saniye, donmaya karşı yastıktan bir " +
+                            "saniye eksiltir. Donma başlarsa bir üst kademeye çık.",
+                        color = Color(0xFF6E7686),
+                        fontSize = 10.sp,
+                        lineHeight = 14.sp
+                    )
+                }
             }
 
             Spacer(Modifier.height(14.dp))

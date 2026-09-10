@@ -18,6 +18,7 @@ object Prefs {
     private const val K_BUFFER = "buffer"
     private const val K_DIAG = "diag"
     private const val K_LIVE_HLS = "live_hls"
+    private const val K_LIVE_OFFSET = "live_offset"
     private const val K_AUTONEXT = "autonext"
 
     private fun p(ctx: Context) = ctx.getSharedPreferences(FILE, Context.MODE_PRIVATE)
@@ -98,10 +99,21 @@ object Prefs {
         p(ctx).edit().putBoolean(K_DIAG, v).apply()
     }
 
-    fun liveHls(ctx: Context): Boolean = p(ctx).getBoolean(K_LIVE_HLS, false)
+    // Varsayilan HLS. TS surekli akista oynatici canli ucun hemen arkasinda
+    // kaliyor, elinde yastik olmadigi icin sunucunun her duraklamasi donma
+    // olarak goruluyordu. HLS parcalari ileriden indirdigi icin derin bir
+    // arabellek kurabiliyor.
+    fun liveHls(ctx: Context): Boolean = p(ctx).getBoolean(K_LIVE_HLS, true)
 
     fun setLiveHls(ctx: Context, v: Boolean) {
         p(ctx).edit().putBoolean(K_LIVE_HLS, v).apply()
+    }
+
+    /** Canli yayinda hedeflenen gecikme, saniye. 0 = oynaticinin kendi secimi. */
+    fun liveOffsetSeconds(ctx: Context): Int = p(ctx).getInt(K_LIVE_OFFSET, 0)
+
+    fun setLiveOffsetSeconds(ctx: Context, v: Int) {
+        p(ctx).edit().putInt(K_LIVE_OFFSET, v).apply()
     }
 
     fun autoNext(ctx: Context): Boolean = p(ctx).getBoolean(K_AUTONEXT, true)
