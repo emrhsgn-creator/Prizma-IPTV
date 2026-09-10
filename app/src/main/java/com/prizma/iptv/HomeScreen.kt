@@ -161,13 +161,18 @@ internal fun playLiveList(
     val slice = liveTiles.subList(from, to)
     val startIdx = pos - from
 
+    // Canli yayin bicimi. TS surekli tek bir baglanti; baglanti her kesildiginde
+    // yeniden acilinca sunucu kendi tampon basindan gonderdigi icin kucuk bir
+    // geri sicrama oluyor. HLS ayri parcalar indirdiginden bu sorun yasanmaz.
+    val ext = if (Prefs.liveHls(ctx)) "m3u8" else "ts"
+
     PlayerActivity.startPlaylist(
         ctx = ctx,
-        urls = ArrayList(slice.map { "$host/live/$user/$pass/${it.id}.ts" }),
+        urls = ArrayList(slice.map { "$host/live/$user/$pass/${it.id}.$ext" }),
         titles = ArrayList(slice.map { it.name }),
         ids = ArrayList(slice.map { it.id }),
         icons = ArrayList(slice.map { "" }),
-        exts = ArrayList(slice.map { "ts" }),
+        exts = ArrayList(slice.map { ext }),
         startIndex = startIdx,
         section = Section.LIVE.name,
         resumable = false

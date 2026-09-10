@@ -94,6 +94,8 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.LoadEventInfo
 import androidx.media3.exoplayer.source.MediaLoadData
+import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
+import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
 import androidx.media3.exoplayer.upstream.DefaultBandwidthMeter
 import androidx.media3.extractor.DefaultExtractorsFactory
 import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
@@ -104,6 +106,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.io.IOException
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import java.util.Locale
 
@@ -125,6 +128,32 @@ private const val LIVE_RESUME_MS = 10000
  * yuzden yavas acilan kanallar etkilenmez.
  */
 private const val LIVE_READ_TIMEOUT_MS = 8000
+
+/**
+ * Canli yayinda yeniden deneme gecikmesi.
+ *
+ * media3'un varsayilani min((hataSayisi - 1) * 1000, 5000): birkac hatadan
+ * sonra her yeniden baglanmadan once 5 saniye bosuna bekleniyor. Olculen en
+ * uzun veri boslugu 17.4 sn idi; 8 sn tespit + 5 sn bekleme + baglanma bunu
+ * birebir aciklıyor. Canli yayinda sunucu hemen hazir oldugu icin bu bekleme
+ * yalnizca kayip.
+ */
+private const val LIVE_RETRY_DELAY_MS = 300L
+
+/**
+ * Canli yayin icin kisa ve sabit yeniden deneme gecikmesi. Yeniden denenmemesi
+ * gereken hatalarda (C.TIME_UNSET) varsayilan davranis korunur.
+ */
+@OptIn(UnstableApi::class)
+private fun liveErrorPolicy(): LoadErrorHandlingPolicy =
+    object : DefaultLoadErrorHandlingPolicy() {
+        override fun getRetryDelayMsFor(
+            loadErrorInfo: LoadErrorHandlingPolicy.LoadErrorInfo
+        ): Long {
+            val base = super.getRetryDelayMsFor(loadErrorInfo)
+            return if (base == C.TIME_UNSET) base else LIVE_RETRY_DELAY_MS
+        }
+    }
 
 private data class TrackOption(
     val label: String,
@@ -334,6 +363,7 @@ fun PlayerScreen(
     var triedFallback by remember { mutableStateOf(false) }
     val stats = remember { StallStats() }
     var diag by remember { mutableStateOf(Prefs.diagnostics(ctx)) }
+    var hls by remember { mutableStateOf(Prefs.liveHls(ctx)) }
 
     val live = section == Section.LIVE.name
     val hasList = urls.size > 1
@@ -383,6 +413,13 @@ fun PlayerScreen(
                     if (prev != 0L) {
                         val gap = now - prev
                         if (gap > stats.maxGapMs) stats.maxGapMs = gap
+                        when {
+                            gap > 8000 -> stats.gaps8.incrementAndGet()
+                            gap > 6000 -> stats.gaps68.incrementAndGet()
+                            gap > 4000 -> stats.gaps46.incrementAndGet()
+                            gap > 2000 -> stats.gaps24.incrementAndGet()
+                            else -> Unit
+                        }
                     }
                     stats.lastByteAt = now
                     stats.bytes.addAndGet(bytesTransferred.toLong())
@@ -426,7 +463,11 @@ fun PlayerScreen(
             )
             .setSeekBackIncrementMs(10_000)
             .setSeekForwardIncrementMs(30_000)
-            .setMediaSourceFactory(DefaultMediaSourceFactory(http, extractors))
+            .setMediaSourceFactory(
+                DefaultMediaSourceFactory(http, extractors).apply {
+                    if (live) setLoadErrorHandlingPolicy(liveErrorPolicy())
+                }
+            )
             .build().apply {
                 setMediaItems(urls.map { MediaItem.fromUri(it) })
                 playWhenReady = true
@@ -539,9 +580,13 @@ fun PlayerScreen(
             override fun onPlayerError(e: PlaybackException) {
                 val i = player.currentMediaItemIndex
                 val url = urls.getOrNull(i).orEmpty()
-                if (live && url.endsWith(".ts") && !triedFallback) {
+                if (live && !triedFallback && (url.endsWith(".ts") || url.endsWith(".m3u8"))) {
                     triedFallback = true
-                    val alt = url.removeSuffix(".ts") + ".m3u8"
+                    val alt = if (url.endsWith(".ts")) {
+                        url.removeSuffix(".ts") + ".m3u8"
+                    } else {
+                        url.removeSuffix(".m3u8") + ".ts"
+                    }
                     // setMediaItem tüm listeyi tek öğeye indiriyordu: sonrasında
                     // yukarı/aşağı ile kanal değiştirilemiyor, başlıklar kayıyordu.
                     // replaceMediaItem yalnızca bu kanalı değiştirir.
@@ -821,6 +866,12 @@ fun PlayerScreen(
                     diag = it
                     Prefs.setDiagnostics(ctx, it)
                 },
+                hls = hls,
+                onHls = {
+                    hls = it
+                    Prefs.setLiveHls(ctx, it)
+                    notice = "Sonraki kanal açılışında geçerli"
+                },
                 onDismiss = { showMenu = false }
             )
         }
@@ -1004,6 +1055,8 @@ private fun SettingsPanel(
     onResize: () -> Unit,
     diag: Boolean,
     onDiag: (Boolean) -> Unit,
+    hls: Boolean,
+    onHls: (Boolean) -> Unit,
     onDismiss: () -> Unit
 ) {
     val audio = remember(tracks) {
@@ -1138,6 +1191,21 @@ private fun SettingsPanel(
                 }
             }
 
+            if (live) {
+                Spacer(Modifier.height(14.dp))
+                GroupTitle("Canlı yayın kaynağı")
+                OptRow("TS (varsayılan)", !hls) { onHls(false) }
+                OptRow("HLS (m3u8)", hls) { onHls(true) }
+                Text(
+                    "TS tek sürekli bağlantıdır; bağlantı her koptuğunda yeniden " +
+                        "açılırken küçük bir geri sıçrama olur. HLS ayrı parçalar " +
+                        "indirir, bu sıçrama yaşanmaz. Sonraki kanal açılışında geçerli.",
+                    color = Color(0xFF6E7686),
+                    fontSize = 10.sp,
+                    lineHeight = 14.sp
+                )
+            }
+
             Spacer(Modifier.height(14.dp))
             GroupTitle("Tanılama")
             OptRow("Tanılama katmanı", diag) { onDiag(!diag) }
@@ -1191,6 +1259,14 @@ private class StallStats {
     @Volatile
     var maxGapMs = 0L
 
+    // Bosluklarin dagilimi. 8 sn zaman asimindan kisa olanlar dogal
+    // beklemeler; 8 sn ustu olanlar zaman asimi + yeniden baglanma. 6-8
+    // kovasi doluysa esik dogal davranisi kesiyor demektir.
+    val gaps24 = AtomicInteger(0)
+    val gaps46 = AtomicInteger(0)
+    val gaps68 = AtomicInteger(0)
+    val gaps8 = AtomicInteger(0)
+
     var startedAt = 0L
     var wasReady = false
 
@@ -1203,6 +1279,10 @@ private class StallStats {
         firstByteAt = 0L
         lastByteAt = 0L
         maxGapMs = 0L
+        gaps24.set(0)
+        gaps46.set(0)
+        gaps68.set(0)
+        gaps8.set(0)
         startedAt = 0L
         wasReady = false
     }
@@ -1278,6 +1358,10 @@ private fun DiagOverlay(player: ExoPlayer, stats: StallStats, live: Boolean) {
             appendLine(
                 "Veri boslugu: ${fmt1(gapNow)} sn · en uzun " +
                     "${fmt1(stats.maxGapMs / 1000.0)} sn"
+            )
+            appendLine(
+                "Bosluk 2-4/4-6/6-8/8+: ${stats.gaps24.get()}/" +
+                    "${stats.gaps46.get()}/${stats.gaps68.get()}/${stats.gaps8.get()}"
             )
             appendLine(
                 "Yukleme hatasi: ${stats.loadErrors.intValue}" +

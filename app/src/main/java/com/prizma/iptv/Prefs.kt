@@ -17,6 +17,7 @@ object Prefs {
     private const val K_ACTIVE = "active"
     private const val K_BUFFER = "buffer"
     private const val K_DIAG = "diag"
+    private const val K_LIVE_HLS = "live_hls"
     private const val K_AUTONEXT = "autonext"
 
     private fun p(ctx: Context) = ctx.getSharedPreferences(FILE, Context.MODE_PRIVATE)
@@ -95,6 +96,12 @@ object Prefs {
 
     fun setDiagnostics(ctx: Context, v: Boolean) {
         p(ctx).edit().putBoolean(K_DIAG, v).apply()
+    }
+
+    fun liveHls(ctx: Context): Boolean = p(ctx).getBoolean(K_LIVE_HLS, false)
+
+    fun setLiveHls(ctx: Context, v: Boolean) {
+        p(ctx).edit().putBoolean(K_LIVE_HLS, v).apply()
     }
 
     fun autoNext(ctx: Context): Boolean = p(ctx).getBoolean(K_AUTONEXT, true)
