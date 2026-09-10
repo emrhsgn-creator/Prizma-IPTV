@@ -110,6 +110,22 @@ import java.util.Locale
 /** Canli yayinda donmadan sonra oynatmanin devam etmesi icin gereken arabellek. */
 private const val LIVE_RESUME_MS = 10000
 
+/**
+ * Canli yayinda soket okuma zaman asimi.
+ *
+ * Olculen mekanizma: kaynak sessizce veri gondermeyi birakiyor, ExoPlayer
+ * varsayilan 20 saniye boyunca bekliyor, bu sirada arabellek kuruyor ve
+ * donma oluyor. Arabellek olculen en iyi durumda bile 18.6 sn'ye ciktigi
+ * icin 20 saniyelik bir bekleme her sessizlikte arabellegi mutlaka
+ * bitiriyordu. Esik arabellek derinliginin altina cekilince yeniden
+ * baglanma, elde hala veri varken baslayabiliyor.
+ *
+ * Canli TS akisinda veri surekli akar; 8 saniyelik tam sessizlik saglikli
+ * bir baglantida gorulmez. Baglanma zaman asimi (15 sn) ayri kalir, bu
+ * yuzden yavas acilan kanallar etkilenmez.
+ */
+private const val LIVE_READ_TIMEOUT_MS = 8000
+
 private data class TrackOption(
     val label: String,
     val groupIndex: Int,
@@ -341,7 +357,7 @@ fun PlayerScreen(
             .setUserAgent("PrizmaIPTV/1.0")
             .setAllowCrossProtocolRedirects(true)
             .setConnectTimeoutMs(15000)
-            .setReadTimeoutMs(20000)
+            .setReadTimeoutMs(if (live) LIVE_READ_TIMEOUT_MS else 20000)
             .setTransferListener(object : TransferListener {
                 override fun onTransferInitializing(
                     source: DataSource,
@@ -361,9 +377,14 @@ fun PlayerScreen(
                     isNetwork: Boolean,
                     bytesTransferred: Int
                 ) {
-                    if (stats.firstByteAt == 0L) {
-                        stats.firstByteAt = SystemClock.elapsedRealtime()
+                    val now = SystemClock.elapsedRealtime()
+                    if (stats.firstByteAt == 0L) stats.firstByteAt = now
+                    val prev = stats.lastByteAt
+                    if (prev != 0L) {
+                        val gap = now - prev
+                        if (gap > stats.maxGapMs) stats.maxGapMs = gap
                     }
+                    stats.lastByteAt = now
                     stats.bytes.addAndGet(bytesTransferred.toLong())
                 }
 
@@ -1162,6 +1183,14 @@ private class StallStats {
     @Volatile
     var firstByteAt = 0L
 
+    // Iki bayt arasindaki en uzun sessizlik. Donmanin okuma zaman asimiyla
+    // mi sinirlandigini dogrudan gosterir.
+    @Volatile
+    var lastByteAt = 0L
+
+    @Volatile
+    var maxGapMs = 0L
+
     var startedAt = 0L
     var wasReady = false
 
@@ -1172,6 +1201,8 @@ private class StallStats {
         lastError.value = ""
         bytes.set(0L)
         firstByteAt = 0L
+        lastByteAt = 0L
+        maxGapMs = 0L
         startedAt = 0L
         wasReady = false
     }
@@ -1239,9 +1270,23 @@ private fun DiagOverlay(player: ExoPlayer, stats: StallStats, live: Boolean) {
             }
             val avg = if (secs > 1.0) stats.bytes.get() * 8.0 / secs / 1_000_000 else 0.0
             appendLine("Indirilen: $mb MB · ort ${fmt1(avg)} Mbps")
+            val gapNow = if (stats.lastByteAt > 0L) {
+                (SystemClock.elapsedRealtime() - stats.lastByteAt) / 1000.0
+            } else {
+                0.0
+            }
+            appendLine(
+                "Veri boslugu: ${fmt1(gapNow)} sn · en uzun " +
+                    "${fmt1(stats.maxGapMs / 1000.0)} sn"
+            )
             appendLine(
                 "Yukleme hatasi: ${stats.loadErrors.intValue}" +
-                    (if (live) " · devam esigi ${LIVE_RESUME_MS / 1000} sn" else "")
+                    if (live) {
+                        " · esik ${LIVE_RESUME_MS / 1000}/" +
+                            "${LIVE_READ_TIMEOUT_MS / 1000} sn"
+                    } else {
+                        ""
+                    }
             )
             val le = stats.lastError.value
             if (le.isNotEmpty()) appendLine("Son hata: $le")
