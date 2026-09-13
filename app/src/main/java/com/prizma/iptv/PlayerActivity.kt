@@ -138,7 +138,26 @@ private const val LIVE_READ_TIMEOUT_MS = 8000
  * birebir aciklıyor. Canli yayinda sunucu hemen hazir oldugu icin bu bekleme
  * yalnizca kayip.
  */
-private const val LIVE_RETRY_DELAY_MS = 300L
+private const val LIVE_RETRY_DELAY_MS = 1500L
+
+/**
+ * 403 sonrasi yeniden deneme gecikmesi.
+ *
+ * Xtream sunucularinda canli yayinda 403 genellikle "es zamanli baglanti
+ * sinirin doldu" demektir. Hizli yeniden deneme sinirlari daha da doldurur:
+ * her deneme yeni bir baglanti acar, sunucu eskisini henuz birakmamistir.
+ * Bu durumda beklemek tek dogru davranis.
+ */
+private const val LIVE_FORBIDDEN_RETRY_DELAY_MS = 4000L
+
+/**
+ * Canli yayinda yeniden deneme sayisi.
+ *
+ * media3'un canli progressive akis icin varsayilani 6. 300 ms'lik gecikmeyle
+ * birlikte tek bir olu soket iki saniyede alti yeni baglanti aciyordu ve
+ * baglanti sinirli hesaplarda butun kanallar 403 vermeye basliyordu.
+ */
+private const val LIVE_RETRY_COUNT = 3
 
 /**
  * Canli yayin icin kisa ve sabit yeniden deneme gecikmesi. Yeniden denenmemesi
@@ -151,8 +170,14 @@ private fun liveErrorPolicy(): LoadErrorHandlingPolicy =
             loadErrorInfo: LoadErrorHandlingPolicy.LoadErrorInfo
         ): Long {
             val base = super.getRetryDelayMsFor(loadErrorInfo)
-            return if (base == C.TIME_UNSET) base else LIVE_RETRY_DELAY_MS
+            if (base == C.TIME_UNSET) return base
+            val cause = loadErrorInfo.exception
+            val forbidden = cause is HttpDataSource.InvalidResponseCodeException &&
+                cause.responseCode == 403
+            return if (forbidden) LIVE_FORBIDDEN_RETRY_DELAY_MS else LIVE_RETRY_DELAY_MS
         }
+
+        override fun getMinimumLoadableRetryCount(dataType: Int): Int = LIVE_RETRY_COUNT
     }
 
 private data class TrackOption(
@@ -282,7 +307,12 @@ class PlayerActivity : ComponentActivity() {
 private fun errorDetail(e: PlaybackException): String {
     val cause = e.cause
     val extra = when {
-        cause is HttpDataSource.InvalidResponseCodeException -> "HTTP ${cause.responseCode}"
+        cause is HttpDataSource.InvalidResponseCodeException ->
+            if (cause.responseCode == 403) {
+                "HTTP 403 · hesabin es zamanli baglanti siniri dolmus olabilir"
+            } else {
+                "HTTP ${cause.responseCode}"
+            }
         cause != null -> {
             val m = cause.message?.trim().orEmpty()
             if (m.isEmpty()) cause.javaClass.simpleName
