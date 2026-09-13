@@ -631,7 +631,14 @@ fun PlayerScreen(
             override fun onPlayerError(e: PlaybackException) {
                 val i = player.currentMediaItemIndex
                 val url = urls.getOrNull(i).orEmpty()
-                if (live && !triedFallback && (url.endsWith(".ts") || url.endsWith(".m3u8"))) {
+                // 403 bir bicim sorunu degil, hesabin es zamanli baglanti
+                // siniri. Bu durumda alternatif bicimi denemek yalnizca bir
+                // slot daha harcar ve sinirin acilmasini geciktirir.
+                val forbidden = (e.cause as? HttpDataSource.InvalidResponseCodeException)
+                    ?.responseCode == 403
+                if (live && !triedFallback && !forbidden &&
+                    (url.endsWith(".ts") || url.endsWith(".m3u8"))
+                ) {
                     triedFallback = true
                     val alt = if (url.endsWith(".ts")) {
                         url.removeSuffix(".ts") + ".m3u8"
