@@ -102,9 +102,7 @@ import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.PlayerView
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.withContext
 import java.io.IOException
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
@@ -141,14 +139,18 @@ private const val LIVE_READ_TIMEOUT_MS = 8000
 private const val LIVE_RETRY_DELAY_MS = 1500L
 
 /**
- * 403 sonrasi yeniden deneme gecikmesi.
+ * 403'te yeniden deneme yok.
  *
- * Xtream sunucularinda canli yayinda 403 genellikle "es zamanli baglanti
- * sinirin doldu" demektir. Hizli yeniden deneme sinirlari daha da doldurur:
- * her deneme yeni bir baglanti acar, sunucu eskisini henuz birakmamistir.
- * Bu durumda beklemek tek dogru davranis.
+ * Xtream'de canli yayinda 403 ya "es zamanli baglanti sinirin doldu" ya da
+ * kanal yayinda degil demektir; ikisi de birkac saniyede kendiliginden
+ * duzelmez. Onceden 4 saniye bekleyip 3 kez deniyorduk, yani olu bir kanal
+ * hesabin baglanti hakkini 12+ saniye tutuyordu ve bu sirada acilan baska
+ * kanallar da 403 alabiliyordu.
+ *
+ * Cihazda olculen 403'ler (TELE 1 HD, beIN GURME HD) iki turda da ayni
+ * kanallarda tekrarladi, yani gecici degiller. Artik hic denemiyoruz: hata
+ * dogrudan kullaniciya doner, slot serbest kalir.
  */
-private const val LIVE_FORBIDDEN_RETRY_DELAY_MS = 4000L
 
 /**
  * Canli yayinda yeniden deneme sayisi.
@@ -172,9 +174,10 @@ private fun liveErrorPolicy(): LoadErrorHandlingPolicy =
             val base = super.getRetryDelayMsFor(loadErrorInfo)
             if (base == C.TIME_UNSET) return base
             val cause = loadErrorInfo.exception
-            val forbidden = cause is HttpDataSource.InvalidResponseCodeException &&
-                cause.responseCode == 403
-            return if (forbidden) LIVE_FORBIDDEN_RETRY_DELAY_MS else LIVE_RETRY_DELAY_MS
+            val code = (cause as? HttpDataSource.InvalidResponseCodeException)?.responseCode
+            // Kalici reddetmeler: denemek yalnizca baglanti slotu harcar.
+            if (code == 403 || code == 401 || code == 404) return C.TIME_UNSET
+            return LIVE_RETRY_DELAY_MS
         }
 
         override fun getMinimumLoadableRetryCount(dataType: Int): Int = LIVE_RETRY_COUNT
@@ -465,9 +468,18 @@ fun PlayerScreen(
 
         val extractors = DefaultExtractorsFactory()
             .setTsExtractorFlags(DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS)
-            .setTsExtractorTimestampSearchBytes(1500 * 188)
+            .apply {
+                // Genis zaman damgasi taramasi sure hesabi ve arama dogrulugu
+                // icindir; canli yayinda ikisi de anlamsiz. 1500*188 = 282 KB,
+                // media3 varsayilaninin (112*188 ≈ 21 KB) 13 kati ve her kanal
+                // acilisina dogrudan gecikme ekliyor. VOD'da arama dogrulugu
+                // gerektigi icin genis tarama orada korunuyor.
+                if (!live) setTsExtractorTimestampSearchBytes(1500 * 188)
+            }
 
-        val sec = Prefs.bufferSeconds(ctx)
+        val sec = Prefs.bufferSeconds(ctx).coerceAtLeast(5)
+        val minMs = sec * 1000
+        val maxMs = sec * 2000
         // Olculen desen: arabellek sifira iniyor, oynatici yalnizca 3 saniye
         // birikince devam ediyor ve kisa surede yine kuruyor. Dort donmanin
         // yalnizca birinde baglanti hatasi vardi, yani sorun kopma degil,
@@ -475,9 +487,15 @@ fun PlayerScreen(
         // devam esigini yukseltmek, cok sayida kisa donma yerine daha az ama
         // sonrasi daha dayanikli bir bekleme birakiyor. Yalnizca ne zaman
         // devam edilecegini degistirir; cozucu ve kaynak yoluna dokunmaz.
-        val resumeMs = if (live) LIVE_RESUME_MS else 3000
+        //
+        // Devam esigi artik secilen arabellege oranli. Sabit 10 saniye,
+        // ayarlardaki "Düşük (10s)" secimiyle minBufferMs'e esitleniyordu:
+        // her donmadan sonra oynatici arabellegin TAMAMI dolana kadar
+        // bekliyordu, ustelik maxBuffer yalnizca 20 saniyeydi. Yani "Düşük",
+        // donma suresini azaltmak yerine azamiye cikariyordu.
+        val resumeMs = if (live) (minMs / 2).coerceIn(2000, LIVE_RESUME_MS) else 3000
         val loadControl = DefaultLoadControl.Builder()
-            .setBufferDurationsMs(sec * 1000, sec * 2000, 1500, resumeMs)
+            .setBufferDurationsMs(minMs, maxMs, 1500, resumeMs)
             .build()
 
         ExoPlayer.Builder(ctx)
@@ -603,14 +621,13 @@ fun PlayerScreen(
             val i = player.currentMediaItemIndex
             val d = player.duration
             if (resumable && d > 0) {
-                // Tüm geçmişi okuyup yeniden yazıyor; ana iş parçacığında
-                // yapılınca oynatma sırasında düzenli takılma yaratıyordu.
-                val pos = player.currentPosition
-                withContext(Dispatchers.IO) {
-                    Store.record(
-                        ctx, section, idAt(i), titleAt(i), iconAt(i), extAt(i), pos, d
-                    )
-                }
+                // Store gecmisi bellekte tutuyor ve diske arka planda yaziyor;
+                // bu cagri artik ana is parcacigini bloklamiyor, ayrica is
+                // parcacigi degistirmeye de gerek kalmiyor.
+                Store.record(
+                    ctx, section, idAt(i), titleAt(i), iconAt(i), extAt(i),
+                    player.currentPosition, d
+                )
             }
         }
     }
