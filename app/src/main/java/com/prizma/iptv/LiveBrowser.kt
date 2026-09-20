@@ -37,6 +37,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -74,6 +75,7 @@ import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 private val PaneBg = Color(0xFF0C0F1D)
 private val ListBg = Color(0xFF10142A)
@@ -110,6 +112,16 @@ private const val PREVIEW_DELAY_MS = 900L
  */
 private const val PREVIEW_MAX_W = 1280
 private const val PREVIEW_MAX_H = 720
+
+/**
+ * Onizleme baglantisi birakildiktan sonra tam ekran oynaticinin acilmasi
+ * icin beklenen sure.
+ *
+ * stop() soketi oynatma is parcaciginda kapatir; cagrildigi anda is bitmis
+ * olmuyor. Bu kisa bekleme olmadan tam ekran oynatici, onizlemenin soketi
+ * hala acikken baglaniyor ve saglayici iki es zamanli baglanti goruyor.
+ */
+private const val PREVIEW_RELEASE_MS = 400L
 
 /**
  * Onizlemede kalici hata veren kanallar.
@@ -172,6 +184,7 @@ internal fun LiveBrowser(
     autoFocus: Boolean
 ) {
     val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
     var index by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(channels) { index = 0 }
@@ -182,10 +195,25 @@ internal fun LiveBrowser(
     // Xtream hesaplarının çoğunda aynı anda tek bağlantıya izin var. Tam ekran
     // oynatıcı açılmadan önce önizlemenin bağlantısını bırakması şart; yoksa
     // sunucu ikinci isteği reddediyor ve hiçbir kanal açılmıyor.
+    //
+    // stop() soketi oynatma is parcaciginda kapatir, yani cagrildigi anda
+    // is bitmis olmuyor. Activity'yi ayni karede baslatinca tam ekran
+    // oynatici, onizlemenin soketi hala acikken baglaniyordu. Cihazda
+    // olculen desen buydu: tam ekrana girerken saglayiciya ayni anda IKI
+    // baglanti (ikisi de :25869), ~6 saniye sonra biri CLOSE_WAIT'e
+    // dusuyor. CLOSE_WAIT sunucunun kapattigi demektir, yani saglayici iki
+    // baglanti gorup birini kesiyor.
+    //
+    // Once birakip sonra aciyoruz. Gecikme kisa; kanal acilisi zaten
+    // saniyeler suruyor, ama sunucunun iki baglanti gormesi butun yayini
+    // bozabiliyor.
     val openChannel: (Tile) -> Unit = { t ->
-        preview.stop()
-        preview.clearMediaItems()
-        playLiveList(ctx, host, user, pass, channels, t)
+        scope.launch {
+            preview.stop()
+            preview.clearMediaItems()
+            delay(PREVIEW_RELEASE_MS)
+            playLiveList(ctx, host, user, pass, channels, t)
+        }
     }
 
     Row(Modifier.fillMaxSize()) {
