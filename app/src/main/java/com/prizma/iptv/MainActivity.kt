@@ -60,15 +60,33 @@ fun PrizmaApp() {
 
         LaunchedEffect(Unit) {
             val saved = Prefs.load(ctx)
-            if (saved != null) {
-                host = saved.first; user = saved.second; pass = saved.third
-                try {
-                    account = XtreamApi.login(host, user, pass)
-                } catch (e: Exception) {
-                    account = null
-                }
+            if (saved == null) {
+                autoTried = true
+                return@LaunchedEffect
             }
+            host = saved.first; user = saved.second; pass = saved.third
+
+            // Kaydedilmis profil varsa ana ekrani HEMEN goster.
+            //
+            // Katalog zaten diskte duruyor, ama onceden giris yaniti gelene
+            // kadar hicbir sey cizilmiyordu: acilis, sunucunun cevap hizina
+            // bagli olarak okuma zaman asimina (60 sn) kadar bos ekranda
+            // bekleyebiliyordu. Disk onbelleginin acilis hizina hic katkisi
+            // olmuyordu, cunku ona ulasilan ekran hic acilmiyordu.
+            //
+            // Gecici hesap nesnesiyle ana ekran aciliyor; dogrulama arkadan
+            // gelip gercek bilgileri yerine koyuyor.
+            account = Account(user, "-", "-", "-", "-")
             autoTried = true
+            try {
+                account = XtreamApi.login(host, user, pass)
+            } catch (e: AuthRejected) {
+                // Kimlik gercekten reddedildi: giris ekranina don.
+                account = null
+            } catch (e: Exception) {
+                // Ag ya da sunucu hatasi. Onbellekteki katalogla devam et;
+                // kullaniciyi girise atmanin bir faydasi yok.
+            }
         }
 
         val acc = account

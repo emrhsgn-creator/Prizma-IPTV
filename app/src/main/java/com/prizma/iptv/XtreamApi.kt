@@ -1,5 +1,7 @@
 package com.prizma.iptv
 
+import android.util.JsonReader
+import android.util.JsonToken
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -19,6 +21,16 @@ data class Account(
     val maxConnections: String,
     val activeConnections: String
 )
+
+/**
+ * Sunucu kimlik bilgilerini reddetti ya da hesap kapali.
+ *
+ * Ag hatasindan ayri tutuluyor: agdan kaynaklanan bir hatada elimizdeki
+ * onbellekle devam edebiliriz, ama kimlik reddedildiyse giris ekranina
+ * donmek gerekir. Onceden ikisi de duz Exception'di ve cagiran taraf
+ * ayirt edemiyordu.
+ */
+class AuthRejected(message: String) : Exception(message)
 
 data class Category(val id: String, val name: String, val count: Int = 0)
 
@@ -101,15 +113,72 @@ object XtreamApi {
 
     private fun enc(s: String): String = URLEncoder.encode(s, "UTF-8")
 
+    private fun urlFor(host: String, user: String, pass: String, params: String): String =
+        host + "/player_api.php?username=" + enc(user) + "&password=" + enc(pass) + params
+
+    /** Kucuk yanitlar icin: giris, dizi/film detayi, yayin akisi. */
     private suspend fun request(
         host: String, user: String, pass: String, params: String
     ): String = withContext(Dispatchers.IO) {
-        val url = host + "/player_api.php?username=" + enc(user) + "&password=" + enc(pass) + params
-        val req = Request.Builder().url(url).header("User-Agent", "PrizmaIPTV/1.0").build()
+        val req = Request.Builder().url(urlFor(host, user, pass, params))
+            .header("User-Agent", "PrizmaIPTV/1.0").build()
         client.newCall(req).execute().use { res ->
             if (!res.isSuccessful) throw Exception("Sunucu hatası: HTTP ${res.code}")
             res.body?.string().orEmpty()
         }
+    }
+
+    /**
+     * Buyuk listeler icin akis tabanli okuma.
+     *
+     * Onceden butun govde once String'e, sonra JSONArray nesne agacina
+     * aliniyor, ardindan ucuncu kez veri sinifi listesine kopyalaniyordu;
+     * ucu de ayni anda bellekteydi. Buyuk bir saglayicida (on binlerce kanal
+     * ve film) tepe kullanim 1-2 GB RAM'li bir TV stick'i zorluyor, GC
+     * baskisini yukseltiyordu (cihazda 47 dakikada 327 GC olculdu).
+     *
+     * JsonReader akisi tek geciste okur: yalnizca sonuc listesi bellekte
+     * kalir.
+     */
+    private fun <T> streamJson(
+        host: String, user: String, pass: String, params: String, parse: (JsonReader) -> T
+    ): T {
+        val req = Request.Builder().url(urlFor(host, user, pass, params))
+            .header("User-Agent", "PrizmaIPTV/1.0").build()
+        client.newCall(req).execute().use { res ->
+            if (!res.isSuccessful) throw Exception("Sunucu hatası: HTTP ${res.code}")
+            val body = res.body ?: throw Exception("Sunucu boş yanıt verdi.")
+            return JsonReader(body.charStream()).use { r ->
+                // Bazi Xtream panelleri basta BOM ya da fazladan bosluk
+                // gonderiyor; katı mod bunlarda okumayi bastan kesiyordu.
+                r.isLenient = true
+                parse(r)
+            }
+        }
+    }
+
+    /**
+     * Degeri tipine bakmadan metne cevirir.
+     *
+     * Xtream panelleri ayni alani kimi zaman sayi kimi zaman metin olarak
+     * gonderiyor; eski kod bunu JSONObject.opt().toString() ile asiyordu.
+     */
+    private fun JsonReader.nextText(): String = when (peek()) {
+        JsonToken.NULL -> { nextNull(); "" }
+        JsonToken.BOOLEAN -> nextBoolean().toString()
+        JsonToken.NUMBER, JsonToken.STRING -> nextString()
+        else -> { skipValue(); "" }
+    }
+
+    private fun ratingOf(five: String, ten: String): String {
+        val f = five.toDoubleOrNull()
+        val t = ten.toDoubleOrNull()
+        val v = when {
+            f != null && f > 0.0 -> f
+            t != null && t > 0.0 -> t / 2.0
+            else -> return ""
+        }
+        return String.format(Locale.getDefault(), "%.1f", v)
     }
 
     suspend fun login(
@@ -122,9 +191,13 @@ object XtreamApi {
             throw Exception("Sunucu geçerli bir yanıt vermedi. Adresi kontrol et.")
         }
         val info = root.optJSONObject("user_info") ?: throw Exception("Hesap bilgisi alınamadı.")
-        if (info.opt("auth")?.toString() != "1") throw Exception("Kullanıcı adı veya şifre hatalı.")
+        if (info.opt("auth")?.toString() != "1") {
+            throw AuthRejected("Kullanıcı adı veya şifre hatalı.")
+        }
         val status = info.optString("status", "-")
-        if (!status.equals("Active", true)) throw Exception("Hesap aktif değil (durum: $status).")
+        if (!status.equals("Active", true)) {
+            throw AuthRejected("Hesap aktif değil (durum: $status).")
+        }
         Account(
             username = info.optString("username", user),
             status = status,
@@ -142,60 +215,103 @@ object XtreamApi {
     suspend fun categories(
         host: String, user: String, pass: String, section: Section
     ): List<Category> = withContext(Dispatchers.IO) {
-        val body = request(host, user, pass, "&action=" + section.categoryAction)
-        val arr = try { JSONArray(body) } catch (e: Exception) { JSONArray() }
-        val out = ArrayList<Category>()
-        for (i in 0 until arr.length()) {
-            val o = arr.optJSONObject(i) ?: continue
-            out.add(
-                Category(
-                    o.opt("category_id")?.toString().orEmpty(),
-                    o.optString("category_name", "Kategori")
-                )
-            )
+        try {
+            streamJson(host, user, pass, "&action=" + section.categoryAction) { r ->
+                val out = ArrayList<Category>()
+                if (r.peek() != JsonToken.BEGIN_ARRAY) {
+                    r.skipValue()
+                    return@streamJson out
+                }
+                r.beginArray()
+                while (r.hasNext()) {
+                    if (r.peek() != JsonToken.BEGIN_OBJECT) { r.skipValue(); continue }
+                    var id = ""
+                    var name = ""
+                    r.beginObject()
+                    while (r.hasNext()) {
+                        when (r.nextName()) {
+                            "category_id" -> id = r.nextText()
+                            "category_name" -> name = r.nextText()
+                            else -> r.skipValue()
+                        }
+                    }
+                    r.endObject()
+                    out.add(Category(id, name.ifEmpty { "Kategori" }))
+                }
+                r.endArray()
+                out
+            }
+        } catch (e: Exception) {
+            // Sunucu dizi yerine hata nesnesi donebiliyor; eski davranista da
+            // bu durumda bos liste donuluyordu.
+            emptyList()
         }
-        out
     }
 
     suspend fun allStreams(
         host: String, user: String, pass: String, section: Section
     ): List<StreamItem> = withContext(Dispatchers.IO) {
-        val body = request(host, user, pass, "&action=" + section.streamAction)
-        val arr = try { JSONArray(body) } catch (e: Exception) { JSONArray() }
-        val out = ArrayList<StreamItem>(arr.length())
-        for (i in 0 until arr.length()) {
-            val o = arr.optJSONObject(i) ?: continue
-            out.add(
-                StreamItem(
-                    id = o.opt(section.idKey)?.toString().orEmpty(),
-                    name = o.optString("name", "Adsız"),
-                    icon = o.optString(section.iconKey, ""),
-                    extension = o.optString("container_extension", ""),
-                    categoryId = o.opt("category_id")?.toString().orEmpty(),
-                    rating = parseRating(o),
-                    added = parseAdded(o)
-                )
-            )
+        try {
+            streamJson(host, user, pass, "&action=" + section.streamAction) { r ->
+                val out = ArrayList<StreamItem>(512)
+                if (r.peek() != JsonToken.BEGIN_ARRAY) {
+                    r.skipValue()
+                    return@streamJson out
+                }
+                r.beginArray()
+                while (r.hasNext()) {
+                    if (r.peek() != JsonToken.BEGIN_OBJECT) { r.skipValue(); continue }
+                    var id = ""
+                    var name = ""
+                    var icon = ""
+                    var ext = ""
+                    var catId = ""
+                    var five = ""
+                    var ten = ""
+                    var added: Long? = null
+                    var lastMod: Long? = null
+                    r.beginObject()
+                    while (r.hasNext()) {
+                        when (r.nextName()) {
+                            section.idKey -> id = r.nextText()
+                            section.iconKey -> icon = r.nextText()
+                            "name" -> name = r.nextText()
+                            "container_extension" -> ext = r.nextText()
+                            "category_id" -> catId = r.nextText()
+                            "rating_5based" -> five = r.nextText()
+                            "rating" -> ten = r.nextText()
+                            "added" -> added = r.nextText().toLongOrNull()
+                            "last_modified" -> lastMod = r.nextText().toLongOrNull()
+                            else -> r.skipValue()
+                        }
+                    }
+                    r.endObject()
+                    out.add(
+                        StreamItem(
+                            id = id,
+                            name = name.ifEmpty { "Adsız" },
+                            icon = icon,
+                            extension = ext,
+                            categoryId = catId,
+                            rating = ratingOf(five, ten),
+                            added = added ?: lastMod ?: 0L
+                        )
+                    )
+                }
+                r.endArray()
+                out
+            }
+        } catch (e: Exception) {
+            emptyList()
         }
-        out
     }
 
-    private fun parseRating(o: JSONObject): String {
-        val five = o.opt("rating_5based")?.toString()?.toDoubleOrNull()
-        val ten = o.opt("rating")?.toString()?.toDoubleOrNull()
-        val v = when {
-            five != null && five > 0.0 -> five
-            ten != null && ten > 0.0 -> ten / 2.0
-            else -> return ""
-        }
-        return String.format(Locale.getDefault(), "%.1f", v)
-    }
+    private fun parseRating(o: JSONObject): String =
+        ratingOf(
+            o.opt("rating_5based")?.toString().orEmpty(),
+            o.opt("rating")?.toString().orEmpty()
+        )
 
-    private fun parseAdded(o: JSONObject): Long {
-        val a = o.opt("added")?.toString()?.toLongOrNull()
-        if (a != null) return a
-        return o.opt("last_modified")?.toString()?.toLongOrNull() ?: 0L
-    }
     suspend fun seriesInfo(
         host: String, user: String, pass: String, seriesId: String
     ): SeriesInfo = withContext(Dispatchers.IO) {
@@ -244,7 +360,8 @@ object XtreamApi {
             seasons = seasons
         )
     }
-suspend fun shortEpg(
+
+    suspend fun shortEpg(
         host: String, user: String, pass: String, streamId: String, limit: Int = 8
     ): List<EpgItem> = withContext(Dispatchers.IO) {
         val body = request(
@@ -256,7 +373,7 @@ suspend fun shortEpg(
         } catch (e: Exception) {
             return@withContext emptyList()
         }
-        val arr = root.optJSONArray("epg_listings") ?: return@withContext emptyList()
+        val arr: JSONArray = root.optJSONArray("epg_listings") ?: return@withContext emptyList()
         val out = ArrayList<EpgItem>(arr.length())
         for (i in 0 until arr.length()) {
             val o = arr.optJSONObject(i) ?: continue
@@ -280,6 +397,7 @@ suspend fun shortEpg(
             s
         }
     }
+
     suspend fun vodInfo(
         host: String, user: String, pass: String, vodId: String
     ): VodInfo = withContext(Dispatchers.IO) {
