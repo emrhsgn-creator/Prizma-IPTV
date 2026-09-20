@@ -253,8 +253,14 @@ fun HomeScreen(
         homeReady = false
         for (sec in listOf(Section.VOD, Section.SERIES)) {
             if (cache.containsKey(sec)) continue
-            withContext(Dispatchers.IO) { Catalog.load(ctx, host, user, sec) }
-                ?.let { cache[sec] = it }
+            val disk = withContext(Dispatchers.IO) { Catalog.load(ctx, host, user, sec) }
+            if (disk != null) cache[sec] = disk
+            // Disk kopyasi yeterince tazeyse aga hic cikma. Elle yenileme ve
+            // "önbelleği temizle" dosyayi sildigi icin orada bu kosul zaten
+            // saglanmaz, yani taze surumu isteyen yollar etkilenmiyor.
+            val usable = disk != null &&
+                withContext(Dispatchers.IO) { Catalog.isFresh(ctx, host, user, sec) }
+            if (usable) continue
             runCatching { fetchSection(host, user, pass, sec) }.getOrNull()?.let { fresh ->
                 cache[sec] = fresh
                 withContext(Dispatchers.IO) { Catalog.save(ctx, host, user, sec, fresh) }
@@ -271,6 +277,13 @@ fun HomeScreen(
         // Diskteki kopya varsa anında göster; taze sürüm arkadan gelip üstüne yazar.
         val disk = withContext(Dispatchers.IO) { Catalog.load(ctx, host, user, sec) }
         if (disk != null) cache[sec] = disk
+        if (disk != null &&
+            withContext(Dispatchers.IO) { Catalog.isFresh(ctx, host, user, sec) }
+        ) {
+            // Taze disk kopyasi var; bu bolum icin aga hic cikmiyoruz.
+            loading = false
+            return@LaunchedEffect
+        }
         loading = disk == null
         try {
             val fresh = fetchSection(host, user, pass, sec)
@@ -370,7 +383,13 @@ fun HomeScreen(
                             Icon(Icons.Default.Search, null, tint = Color.White)
                         }
                     }
-                    IconButton(onClick = { reload++ }) {
+                    IconButton(onClick = {
+                        // Elle yenileme tazelik suresini atlamali: disk
+                        // kopyasi silinince Catalog.isFresh false doner ve
+                        // taze surum sunucudan indirilir.
+                        Catalog.clear(ctx)
+                        reload++
+                    }) {
                         Icon(Icons.Default.Refresh, null, tint = Color.White)
                     }
                     IconButton(onClick = onSettings) {

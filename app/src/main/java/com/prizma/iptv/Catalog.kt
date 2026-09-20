@@ -117,7 +117,42 @@ internal object Catalog {
         }
     }
 
-    /** Ayarlardaki "önbelleği temizle" için. */
+    /**
+     * Önbelleğin taze sayıldığı süre.
+     *
+     * save() ilk satıra bir zaman damgası yazıyordu ama hiçbir yer onu
+     * okumuyordu. Sonuç: disk kopyası varken bile her açılışta bütün VOD ve
+     * SERIES kataloğu sunucudan baştan iniyor, ayrıştırılıyor ve diske geri
+     * yazılıyordu. Damga artık okunuyor.
+     */
+    const val TTL_MS = 6L * 60 * 60 * 1000
+
+    /** Onbellegin ne zaman yazildigi; dosya yoksa ya da baslik bozuksa 0. */
+    private fun savedAt(ctx: Context, host: String, user: String, sec: Section): Long {
+        val f = file(ctx, host, user, sec)
+        if (!f.exists()) return 0L
+        return try {
+            val head = f.bufferedReader().use { it.readLine() } ?: return 0L
+            if (!head.startsWith(VERSION + "\t")) return 0L
+            head.substringAfter('\t').trim().toLongOrNull() ?: 0L
+        } catch (e: Exception) {
+            0L
+        }
+    }
+
+    /**
+     * Disk kopyasi aga hic cikmadan kullanilabilir mi.
+     *
+     * Saat geri alinirsa yas negatif cikabilir; o durumda taze saymiyoruz,
+     * yani en kotu ihtimalle eski davranisa (her acilista indir) doneriz.
+     */
+    fun isFresh(ctx: Context, host: String, user: String, sec: Section): Boolean {
+        val t = savedAt(ctx, host, user, sec)
+        if (t <= 0L) return false
+        return (System.currentTimeMillis() - t) in 0 until TTL_MS
+    }
+
+    /** Ayarlardaki "önbelleği temizle" ve elle yenileme için. */
     fun clear(ctx: Context) {
         runCatching {
             ctx.cacheDir.listFiles()?.forEach {
