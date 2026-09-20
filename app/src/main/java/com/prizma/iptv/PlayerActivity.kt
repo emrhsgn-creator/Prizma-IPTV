@@ -509,14 +509,19 @@ fun PlayerScreen(
 
         val extractors = DefaultExtractorsFactory()
             .setTsExtractorFlags(DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS)
-            .apply {
-                // Genis zaman damgasi taramasi sure hesabi ve arama dogrulugu
-                // icindir; canli yayinda ikisi de anlamsiz. 1500*188 = 282 KB,
-                // media3 varsayilaninin (112*188 ≈ 21 KB) 13 kati ve her kanal
-                // acilisina dogrudan gecikme ekliyor. VOD'da arama dogrulugu
-                // gerektigi icin genis tarama orada korunuyor.
-                if (!live) setTsExtractorTimestampSearchBytes(1500 * 188)
-            }
+            // Genis zaman damgasi taramasi.
+            //
+            // 0.5.3'te bunu canlida kapatmistim: 1500*188 = 282 KB, media3
+            // varsayilaninin 13 kati ve her kanal acilisina gecikme ekliyor.
+            // Gerekcem "canlida sure hesabi anlamsiz" idi, ama olculmus bir
+            // kazanc yoktu ve tanilama katmani canli yayinda konumun sureye
+            // esit gorundugunu ortaya cikardi (00:27 · 00:27), yani oynatici
+            // canli akisa sonlu bir sure atfediyor. Zaman damgasi taramasi
+            // tam o hesabi besliyor.
+            //
+            // Kaynagin ne zaman "bittigini" kovaladigimiz bir hatada, olculmemis
+            // bir optimizasyon fazladan degisken demek. Ilk haline donuyor.
+            .setTsExtractorTimestampSearchBytes(1500 * 188)
 
         val sec = Prefs.bufferSeconds(ctx).coerceAtLeast(5)
         val minMs = sec * 1000
@@ -859,6 +864,31 @@ fun PlayerScreen(
                     // kendini toparlamadi. Hicbir yerde ele alinmadigi
                     // icin sessizce bekliyordu.
                     Player.STATE_ENDED -> if (live) recoverTick++
+                }
+            }
+
+            /**
+             * Oynaticinin kendi duraklatmasini yakalar.
+             *
+             * setPauseAtEndOfMediaItems(live) kanal atlamasini durdurdu ama
+             * yerine sessiz bir duraklama koydu: kaynak bitince oynatici
+             * STATE_READY'de kalip yalnizca playWhenReady'yi kapatiyor.
+             * Yani STATE_ENDED hic gelmiyor ve nobetci de devreye girmiyor,
+             * cunku nobetcinin ilk kontrolu "playWhenReady kapaliysa
+             * kullanici duraklatmistir, karisma".
+             *
+             * Cihazdaki tanilama katmani tam bunu gosterdi: "Durum:
+             * duraklatildi", arabellek 16 saniye dolu, veri boslugu 13
+             * saniye, donma sayaci 0.
+             *
+             * END_OF_MEDIA_ITEM nedeni, kullanicinin duraklatmasiyla
+             * oynaticinin kendi duraklatmasini kesin olarak ayiriyor.
+             */
+            override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+                if (live && !playWhenReady &&
+                    reason == Player.PLAY_WHEN_READY_CHANGE_REASON_END_OF_MEDIA_ITEM
+                ) {
+                    recoverTick++
                 }
             }
 
