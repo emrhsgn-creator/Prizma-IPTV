@@ -553,6 +553,21 @@ fun PlayerScreen(
             )
             .setSeekBackIncrementMs(10_000)
             .setSeekForwardIncrementMs(30_000)
+            // Canli yayinda kaynak bittiginde SIRADAKI KANALA GECME.
+            //
+            // Canli liste 81 kanallik bir calma listesi. Sunucu baglantiyi
+            // kapatinca (EOF) ExoPlayer bunu "bu oge bitti" sayip otomatik
+            // olarak siradaki kanala atliyordu: kullanici kanal degistirmedi,
+            // yayin koptu. Ustelik calma listesinde STATE_ENDED yalnizca SON
+            // ogeden sonra geldigi icin toparlanma kodu da hic tetiklenmiyordu.
+            //
+            // Bu bayrak her ogenin sonunda otomatik gecis yerine ENDED
+            // uretiyor; boylece kopma toparlanma yoluna dusuyor ve ayni
+            // kanala yeniden baglaniliyor. Kullanicinin kendi kanal
+            // degistirmesi (seekTo ile acik indeks) etkilenmiyor.
+            //
+            // Dizilerde bolum gecisi korunuyor: bayrak yalnizca canlida acik.
+            .setPauseAtEndOfMediaItems(live)
             .setMediaSourceFactory(
                 DefaultMediaSourceFactory(http, extractors).apply {
                     if (live) setLoadErrorHandlingPolicy(liveErrorPolicy())

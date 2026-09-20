@@ -18,8 +18,8 @@ android {
         applicationId = "com.prizma.iptv"
         minSdk = 21
         targetSdk = 35
-        versionCode = 32
-        versionName = "0.5.4"
+        versionCode = 33
+        versionName = "0.5.5"
 
         if (ffmpegReady) {
             // Hedef cihazlar Android TV kutulari ve stickler; hepsi ARM.
