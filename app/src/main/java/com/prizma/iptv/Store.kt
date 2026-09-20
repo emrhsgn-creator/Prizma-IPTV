@@ -3,6 +3,7 @@ package com.prizma.iptv
 import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.concurrent.Executors
 
 data class SavedItem(
     val section: String,
@@ -25,16 +26,62 @@ data class WatchState(
     val lastSeen: Long
 )
 
+/**
+ * Favoriler ve izleme gecmisi.
+ *
+ * Listeler artik bellekte tutuluyor. Onceden her okuma SharedPreferences'tan
+ * string alip 120 JSON nesnesini bastan ayristiriyor ve siraliyordu; ustelik
+ * bu okumalar kompozisyonun icinden, yani ana is parcacigindan yapiliyordu:
+ *
+ *  - HomeScreen her onResume'da (Refresh.tick) favorites() + history()
+ *  - PlayerActivity acilirken resumePosition()
+ *  - PlayerActivity kapanirken onDispose icinde record()
+ *
+ * Cihazda olculen Choreographer atlamalari bu yolda birikiyordu: kategori
+ * degisiminde 31 ve 37 kare, canli TV ilk acilisinda 94 kare (~1,6 sn).
+ *
+ * Simdi ayristirma surec basina bir kez yapiliyor. Yazmalar once bellegi
+ * gunceller, diske yazim ayri bir is parcaciginda surer; bu sayede record()
+ * ana is parcacigindan cagrilsa bile bloklamaz.
+ */
 object Store {
     private const val FILE = "prizma_store"
     private const val K_FAV = "favorites"
     private const val K_HIST = "history"
     private const val HIST_LIMIT = 120
 
-    private fun prefs(ctx: Context) = ctx.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+    @Volatile
+    private var favCache: List<SavedItem>? = null
 
-    fun favorites(ctx: Context): List<SavedItem> {
-        val raw = prefs(ctx).getString(K_FAV, "[]") ?: "[]"
+    @Volatile
+    private var histCache: List<WatchState>? = null
+
+    // Tek is parcacigi: yazimlarin sirasi korunur, boylece bellekteki son
+    // durum ile diskteki son durum ayni olur.
+    private val io = Executors.newSingleThreadExecutor { r ->
+        Thread(r, "prizma-store").apply { isDaemon = true }
+    }
+
+    // Uygulama baglami kullaniliyor: arka plandaki yazim isi bir Activity'yi
+    // hayatta tutmasin.
+    private fun prefs(ctx: Context) =
+        ctx.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+
+    /**
+     * Ilk okumayi acilista arka planda yapar, boylece ilk kompozisyon bile
+     * ayristirma maliyeti odemez. PrizmaApplication'dan cagriliyor.
+     */
+    fun warm(ctx: Context) {
+        val app = ctx.applicationContext
+        io.execute {
+            runCatching { favorites(app) }
+            runCatching { history(app) }
+        }
+    }
+
+    // --------------------------------------------------------------- favoriler
+
+    private fun parseFavorites(raw: String): List<SavedItem> {
         val arr = try { JSONArray(raw) } catch (e: Exception) { JSONArray() }
         val out = ArrayList<SavedItem>(arr.length())
         for (i in 0 until arr.length()) {
@@ -50,20 +97,35 @@ object Store {
         return out
     }
 
-    private fun writeFavorites(ctx: Context, list: List<SavedItem>) {
-        val arr = JSONArray()
-        list.forEach {
-            arr.put(JSONObject().apply {
-                put("section", it.section)
-                put("id", it.id)
-                put("name", it.name)
-                put("icon", it.icon)
-                put("ext", it.extension)
-                put("rating", it.rating)
-                put("savedAt", it.savedAt)
-            })
+    fun favorites(ctx: Context): List<SavedItem> {
+        favCache?.let { return it }
+        synchronized(this) {
+            favCache?.let { return it }
+            val parsed = parseFavorites(prefs(ctx).getString(K_FAV, "[]") ?: "[]")
+            favCache = parsed
+            return parsed
         }
-        prefs(ctx).edit().putString(K_FAV, arr.toString()).apply()
+    }
+
+    private fun writeFavorites(ctx: Context, list: List<SavedItem>) {
+        favCache = list
+        val app = ctx.applicationContext
+        io.execute {
+            val arr = JSONArray()
+            list.forEach {
+                arr.put(JSONObject().apply {
+                    put("section", it.section)
+                    put("id", it.id)
+                    put("name", it.name)
+                    put("icon", it.icon)
+                    put("ext", it.extension)
+                    put("rating", it.rating)
+                    put("savedAt", it.savedAt)
+                })
+            }
+            // Arka plandayiz; commit() dayanikli ve yazim sirasini bozmaz.
+            runCatching { prefs(app).edit().putString(K_FAV, arr.toString()).commit() }
+        }
     }
 
     fun toggleFavorite(ctx: Context, sectionName: String, id: String, name: String,
@@ -91,8 +153,9 @@ object Store {
         writeFavorites(ctx, all)
     }
 
-    fun history(ctx: Context): List<WatchState> {
-        val raw = prefs(ctx).getString(K_HIST, "[]") ?: "[]"
+    // ------------------------------------------------------------------ gecmis
+
+    private fun parseHistory(raw: String): List<WatchState> {
         val arr = try { JSONArray(raw) } catch (e: Exception) { JSONArray() }
         val out = ArrayList<WatchState>(arr.length())
         for (i in 0 until arr.length()) {
@@ -105,26 +168,46 @@ object Store {
                 )
             )
         }
+        // Siralama ayristirmada bir kez; her okumada degil.
         return out.sortedByDescending { it.lastSeen }
     }
 
-    private fun writeHistory(ctx: Context, list: List<WatchState>) {
-        val arr = JSONArray()
-        list.take(HIST_LIMIT).forEach {
-            arr.put(JSONObject().apply {
-                put("section", it.section)
-                put("id", it.id)
-                put("name", it.name)
-                put("icon", it.icon)
-                put("ext", it.extension)
-                put("position", it.position)
-                put("duration", it.duration)
-                put("lastSeen", it.lastSeen)
-            })
+    fun history(ctx: Context): List<WatchState> {
+        histCache?.let { return it }
+        synchronized(this) {
+            histCache?.let { return it }
+            val parsed = parseHistory(prefs(ctx).getString(K_HIST, "[]") ?: "[]")
+            histCache = parsed
+            return parsed
         }
-        prefs(ctx).edit().putString(K_HIST, arr.toString()).apply()
     }
 
+    private fun writeHistory(ctx: Context, list: List<WatchState>) {
+        val trimmed = list.take(HIST_LIMIT)
+        histCache = trimmed
+        val app = ctx.applicationContext
+        io.execute {
+            val arr = JSONArray()
+            trimmed.forEach {
+                arr.put(JSONObject().apply {
+                    put("section", it.section)
+                    put("id", it.id)
+                    put("name", it.name)
+                    put("icon", it.icon)
+                    put("ext", it.extension)
+                    put("position", it.position)
+                    put("duration", it.duration)
+                    put("lastSeen", it.lastSeen)
+                })
+            }
+            runCatching { prefs(app).edit().putString(K_HIST, arr.toString()).commit() }
+        }
+    }
+
+    /**
+     * Ana is parcacigindan cagrilabilir: bellek guncellemesi anlik, diske
+     * yazim arka planda.
+     */
     fun record(ctx: Context, section: String, id: String, name: String,
                icon: String, ext: String, position: Long, duration: Long) {
         if (id.isEmpty()) return
@@ -153,6 +236,8 @@ object Store {
     }
 
     fun clearHistory(ctx: Context) {
-        prefs(ctx).edit().remove(K_HIST).apply()
+        histCache = emptyList()
+        val app = ctx.applicationContext
+        io.execute { runCatching { prefs(app).edit().remove(K_HIST).commit() } }
     }
 }

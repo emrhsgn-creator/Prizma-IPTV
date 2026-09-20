@@ -9,6 +9,14 @@ import coil.request.CachePolicy
 
 class PrizmaApplication : Application(), ImageLoaderFactory {
 
+    override fun onCreate() {
+        super.onCreate()
+        // Favori ve gecmis listelerini arka planda ayristir. Boylece ilk
+        // kompozisyon (HomeScreen) ve oynaticinin acilisi bu maliyeti ana
+        // is parcaciginda odemez.
+        Store.warm(this)
+    }
+
     override fun newImageLoader(): ImageLoader {
         return ImageLoader.Builder(this)
             .memoryCache {
