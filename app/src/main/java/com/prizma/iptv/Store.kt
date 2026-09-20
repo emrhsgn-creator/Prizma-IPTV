@@ -3,7 +3,9 @@ package com.prizma.iptv
 import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 data class SavedItem(
     val section: String,
@@ -77,6 +79,27 @@ object Store {
             runCatching { favorites(app) }
             runCatching { history(app) }
         }
+    }
+
+    /**
+     * Bekleyen yazimlarin diske inmesini bekler.
+     *
+     * SharedPreferences.apply() kullanilirken Android, surec olurken
+     * bekleyen yazimlari QueuedWork uzerinden bosaltmayi garanti
+     * ediyordu. Yazimi kendi is parcacigimiza alinca o garanti kalkti:
+     * bir favori degisikliginin hemen ardindan uygulama oldurulurse
+     * (ornegin yeniden kurulum sirasinda) degisiklik kaybolabilirdi.
+     *
+     * Kuyruk sirali calistigi icin bos bir is gonderip onun bitmesini
+     * beklemek, oncesindeki butun yazimlarin tamamlandigini garanti
+     * eder. Bekleme sinirli: bir sekilde tikanirsa ana is parcacigini
+     * tutup ANR'a yol acmasin. Pratikte kuyruk bos oldugu icin aninda
+     * doner.
+     */
+    fun flush() {
+        val done = CountDownLatch(1)
+        runCatching { io.execute { done.countDown() } }
+        runCatching { done.await(500, TimeUnit.MILLISECONDS) }
     }
 
     // --------------------------------------------------------------- favoriler
