@@ -28,7 +28,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -56,15 +55,19 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
+import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
 import androidx.media3.extractor.DefaultExtractorsFactory
 import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
 import androidx.media3.ui.AspectRatioFrameLayout
@@ -77,8 +80,72 @@ private val ListBg = Color(0xFF10142A)
 private val CardBg = Color(0xFF141A2E)
 private val TrackBg = Color(0xFF1E2440)
 
-/** Önizleme başlamadan önce beklenen süre; listede hızlı gezerken sunucuyu yormamak için. */
-private const val PREVIEW_DELAY_MS = 700L
+/**
+ * Önizleme başlamadan önce beklenen süre.
+ *
+ * Bu gecikme yalnizca YENI akisi baslatmayi erteler. Onceden eski akisin
+ * yikilmasi gecikmenin disindaydi: odak bir satir kaydigi anda player.stop()
+ * calisiyor, calisan cozucu kapaniyor ve goruntu karariyordu. Amlogic S905
+ * sinifinda tek bir donanim AVC hatti var; onu her odak adiminda kapatip
+ * yeniden acmak cihazda olculen %58 jank'in ana kaynagi (boşta %5,6).
+ *
+ * Artik yikim da gecikmenin icinde: odak yerlesene kadar onceki onizleme
+ * oynamaya devam eder, odak degisirse coroutine delay'de iptal olur ve
+ * cozucuye hic dokunulmaz.
+ */
+private const val PREVIEW_DELAY_MS = 900L
+
+/**
+ * Onizlemede kabul edilen en yuksek cozunurluk.
+ *
+ * Onizleme kutusu ~300 piksel genisliginde; FHD bir akisi tam cozunurlukte
+ * cozmenin gorsel karsiligi yok. Olcumde iki turda da %90+ jank veren dort
+ * kanalin (ATV FHD, CNN TÜRK FHD, HABER GLOBAL FHD, ULUSAL KANAL HD) dordu
+ * de yuksek cozunurluklu.
+ *
+ * Cok varyantli kaynakta (HLS) dusuk varyant secilir. Tek varyantli TS
+ * akisinda media3 zaten tek izi secmek zorunda oldugu icin ayar sessizce
+ * etkisiz kalir; exceedVideoConstraintsIfNecessary varsayilan olarak acik
+ * oldugundan goruntu kaybolmaz.
+ */
+private const val PREVIEW_MAX_W = 1280
+private const val PREVIEW_MAX_H = 720
+
+/**
+ * Onizlemede kalici hata veren kanallar.
+ *
+ * Xtream'de canli yayinda 403 genellikle "es zamanli baglanti sinirin doldu"
+ * demektir ve olu kanallarda kalicidir. Olcumde TELE 1 HD ile beIN GURME HD
+ * iki turda da 403 verdi. Odak her dustugunde yeniden baglanmak hesabin
+ * baglanti hakkini saniyelerce tutuyor; bu, saglam kanallarin da 403
+ * almasina yol acabilir. Surec boyunca hatirlayip bir daha denemiyoruz.
+ */
+private val deadPreviewIds: MutableSet<String> = java.util.Collections.newSetFromMap(
+    java.util.concurrent.ConcurrentHashMap<String, Boolean>()
+)
+
+/**
+ * Onizleme icin yukleme hatasi politikasi.
+ *
+ * Onizleme oynaticisi daha once hic politika vermiyordu, yani media3
+ * varsayilani gecerliydi: 6 deneme, 5 saniyeye kadar artan bekleme. Olu bir
+ * kanalda bu, ~20 saniye boyunca hesabin baglanti hakkini tutmak demek.
+ * Kalici hatalarda (403/401/404) hic denemiyoruz.
+ */
+@OptIn(UnstableApi::class)
+private fun previewErrorPolicy(): LoadErrorHandlingPolicy =
+    object : DefaultLoadErrorHandlingPolicy() {
+        override fun getRetryDelayMsFor(
+            loadErrorInfo: LoadErrorHandlingPolicy.LoadErrorInfo
+        ): Long {
+            val code = (loadErrorInfo.exception as? HttpDataSource.InvalidResponseCodeException)
+                ?.responseCode
+            if (code == 403 || code == 401 || code == 404) return C.TIME_UNSET
+            return super.getRetryDelayMsFor(loadErrorInfo)
+        }
+
+        override fun getMinimumLoadableRetryCount(dataType: Int): Int = 2
+    }
 
 /**
  * Üç panelli Canlı TV gezintisi: solda kategoriler, ortada kanal listesi,
@@ -242,7 +309,17 @@ private fun ChannelPane(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(vertical = 6.dp)
         ) {
-            itemsIndexed(channels, key = { i, t -> "${t.id}#$i" }) { i, t ->
+            itemsIndexed(
+                channels,
+                // Anahtar indeksi de iceriyor: favoriler/gecmis birlesiminde
+                // ayni id iki kez gorunebiliyor ve Compose yinelenen anahtarda
+                // cokuyor. Bu yuzden sade t.id'ye indirgenmedi.
+                key = { i, t -> "${t.id}#$i" },
+                // Butun satirlar ayni yapida. contentType verilince Compose
+                // kaydirirken kompozisyonlari yeniden kullanabiliyor; 2151
+                // kanallik listede fark belirgin.
+                contentType = { _, _ -> "channel" }
+            ) { i, t ->
                 ChannelRow(
                     tile = t,
                     selected = i == index,
@@ -406,8 +483,16 @@ private fun rememberPreviewPlayer(): ExoPlayer {
                     .setBufferDurationsMs(2000, 8000, 800, 1500)
                     .build()
             )
-            .setMediaSourceFactory(DefaultMediaSourceFactory(http, extractors))
+            .setMediaSourceFactory(
+                DefaultMediaSourceFactory(http, extractors)
+                    .setLoadErrorHandlingPolicy(previewErrorPolicy())
+            )
             .build()
+            .apply {
+                trackSelectionParameters = trackSelectionParameters.buildUpon()
+                    .setMaxVideoSize(PREVIEW_MAX_W, PREVIEW_MAX_H)
+                    .build()
+            }
     }
     DisposableEffect(player) {
         onDispose { player.release() }
@@ -430,6 +515,11 @@ private fun PreviewPane(
     var buffering by remember { mutableStateOf(false) }
     var failed by remember { mutableStateOf(false) }
 
+    // Oynaticiya gercekten yuklenmis olan kanal. Odak degisince etiket hemen
+    // guncellenir, ama goruntu debounce suresince onceki kanala aittir; bu
+    // farki kullaniciya gosterebilmek icin ayri tutuluyor.
+    val loadedId = remember { mutableStateOf<String?>(null) }
+
     DisposableEffect(player) {
         val l = object : Player.Listener {
             override fun onPlaybackStateChanged(state: Int) {
@@ -440,6 +530,13 @@ private fun PreviewPane(
             override fun onPlayerError(error: PlaybackException) {
                 buffering = false
                 failed = true
+                // Kalici reddi hatirla; bu kanalda bir daha onizleme
+                // baglantisi acip hesabin baglanti hakkini tutmayalim.
+                val code = (error.cause as? HttpDataSource.InvalidResponseCodeException)
+                    ?.responseCode
+                if (code == 403 || code == 401 || code == 404) {
+                    loadedId.value?.let { deadPreviewIds.add(it) }
+                }
             }
         }
         player.addListener(l)
@@ -476,13 +573,39 @@ private fun PreviewPane(
 
     LaunchedEffect(channel?.id, resumeTick) {
         val c = channel
-        player.stop()
-        player.clearMediaItems()
+        // Aninda yalnizca ucuz durum sifirlamasi. Oynaticiya burada
+        // dokunmuyoruz: kaydirirken onceki onizleme oynamaya devam etsin.
         epg = null
         failed = false
-        if (c == null) return@LaunchedEffect
+
+        if (c == null) {
+            player.stop()
+            player.clearMediaItems()
+            loadedId.value = null
+            return@LaunchedEffect
+        }
+
+        if (c.id in deadPreviewIds) {
+            // Daha once kalici hata vermisti; baglanti acmadan dogrudan
+            // bildiriyoruz. Yayin akisi yine de gosterilebilir.
+            player.stop()
+            player.clearMediaItems()
+            loadedId.value = null
+            failed = true
+            epg = runCatching { XtreamApi.shortEpg(host, user, pass, c.id) }
+                .getOrDefault(emptyList())
+            return@LaunchedEffect
+        }
+
+        // Odak yerlesene kadar bekle. Bu noktaya kadar cozucu hala onceki
+        // kanali oynatiyor; odak degisirse coroutine tam burada iptal olur ve
+        // cozucu hic yikilmaz.
         delay(PREVIEW_DELAY_MS)
+
         val ext = if (c.ext.isNotEmpty()) c.ext else "ts"
+        player.stop()
+        player.clearMediaItems()
+        loadedId.value = c.id
         player.setMediaItem(MediaItem.fromUri("$host/live/$user/$pass/${c.id}.$ext"))
         player.playWhenReady = true
         player.prepare()
@@ -515,9 +638,23 @@ private fun PreviewPane(
                 onRelease = { it.player = null },
                 modifier = Modifier.fillMaxSize()
             )
+            // Odak yeni kanalda ama goruntu henuz onceki kanala ait.
+            val settling = channel != null && channel.id != loadedId.value
             when {
-                failed -> Text("Önizleme açılamadı", color = Color(0xFFFF6B6B), fontSize = 12.sp)
-                buffering -> CircularProgressIndicator(color = PrizmaAccent)
+                failed -> Text(
+                    if (channel != null && channel.id in deadPreviewIds) {
+                        "Bu kanal yayında değil"
+                    } else {
+                        "Önizleme açılamadı"
+                    },
+                    color = Color(0xFFFF6B6B),
+                    fontSize = 12.sp
+                )
+                // Material3'un CircularProgressIndicator'u sonsuz animasyondur:
+                // ekranda oldugu her karede yeniden cizim tetikler. Cihazda
+                // hicbir sey degismezken 30 saniyede 1595 kare (~53 fps) cizim
+                // olculdu, kaynagi buydu. Statik yazi ayni bilgiyi veriyor.
+                settling || buffering -> Text("Yükleniyor…", color = Muted, fontSize = 12.sp)
             }
         }
 
@@ -569,8 +706,11 @@ private fun PreviewPane(
 private fun EpgList(epg: List<EpgItem>?) {
     val now = System.currentTimeMillis() / 1000
     when {
+        // Sonsuz animasyonlu gosterge yerine statik yazi: bu panel odak her
+        // degistiginde yeniden yukleniyor, yani gosterge neredeyse surekli
+        // ekranda kaliyor ve bos cizimi tek basina ayakta tutuyordu.
         epg == null -> Box(Modifier.fillMaxSize(), Alignment.Center) {
-            CircularProgressIndicator(color = PrizmaAccent)
+            Text("Yayın akışı yükleniyor…", color = Muted, fontSize = 12.sp)
         }
 
         epg.isEmpty() -> Box(Modifier.fillMaxSize(), Alignment.Center) {
