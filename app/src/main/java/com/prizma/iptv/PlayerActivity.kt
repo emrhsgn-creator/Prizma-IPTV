@@ -162,6 +162,25 @@ private const val LIVE_RETRY_DELAY_MS = 1500L
 private const val LIVE_RETRY_COUNT = 3
 
 /**
+ * Canli yayinda oynatmanin durdugunu kabul etmeden once beklenen sure.
+ *
+ * Sunucu baglantiyi kapatmadan sessizce susarsa EOF gelmez, dolayisiyla
+ * STATE_ENDED de gelmez: oynatici READY kalir ama konum ilerlemez. Bu esik
+ * o durumu yakalar. Arabellek derinliginden (varsayilan 30 sn) kisa
+ * tutuluyor ki arabellek tukenmeden once yeniden baglanma baslasin.
+ */
+private const val LIVE_STALL_TIMEOUT_MS = 12_000L
+
+/**
+ * Yeniden baglanma denemeleri arasindaki artan bekleme.
+ *
+ * Son deger tekrarlanir: canli yayinda pes etmek dogru degil (mac
+ * ortasinda kullanici ekranin basinda), ama 15 saniyeden sik denemek de
+ * hesabin es zamanli baglanti haklarini tuketir.
+ */
+private val LIVE_RECOVER_DELAYS_MS = longArrayOf(1_000, 2_000, 4_000, 8_000, 15_000)
+
+/**
  * Canli yayin icin kisa ve sabit yeniden deneme gecikmesi. Yeniden denenmemesi
  * gereken hatalarda (C.TIME_UNSET) varsayilan davranis korunur.
  */
@@ -394,6 +413,10 @@ fun PlayerScreen(
     var viewRef by remember { mutableStateOf<PlayerView?>(null) }
     var barVisible by remember { mutableStateOf(true) }
     var triedFallback by remember { mutableStateOf(false) }
+    // Canli yayin kopmasindan sonra yeniden baglanma durumu.
+    var recoverTick by remember { mutableIntStateOf(0) }
+    var recoverAttempt by remember { mutableIntStateOf(0) }
+    var recovering by remember { mutableStateOf(false) }
     val stats = remember { StallStats() }
     var diag by remember { mutableStateOf(Prefs.diagnostics(ctx)) }
     var hls by remember { mutableStateOf(Prefs.liveHls(ctx)) }
@@ -639,6 +662,87 @@ fun PlayerScreen(
         }
     }
 
+    /**
+     * Kopan canli yayina yeniden baglanir.
+     *
+     * STATE_ENDED ya da nobetcinin tespit ettigi durma recoverTick'i
+     * artirir; bu etki de artan bir bekleme sonrasi kaynagi bastan kurar.
+     */
+    LaunchedEffect(recoverTick) {
+        if (recoverTick == 0) return@LaunchedEffect
+        recovering = true
+        val wait = LIVE_RECOVER_DELAYS_MS[
+            recoverAttempt.coerceAtMost(LIVE_RECOVER_DELAYS_MS.lastIndex)
+        ]
+        recoverAttempt++
+        delay(wait)
+        // stop() acik kalan veri kaynagini ve soketi birakir. Olcumde
+        // uygulamanin kapatmadigi CLOSE_WAIT soketleri gorulmustu; yeniden
+        // baglanmadan once eskisini birakmak o birikmeyi onler.
+        player.stop()
+        player.seekToDefaultPosition(player.currentMediaItemIndex)
+        player.prepare()
+        player.playWhenReady = true
+    }
+
+    /**
+     * Sessiz susma nobetcisi.
+     *
+     * Sunucu baglantiyi kapatmadan veri gondermeyi keserse EOF gelmez,
+     * STATE_ENDED de gelmez: oynatici READY ve "oynuyor" gorunur ama konum
+     * ilerlemez. Bu durum yalnizca konumu ornekleyerek anlasilir.
+     */
+    LaunchedEffect(live) {
+        if (!live) return@LaunchedEffect
+        var lastPos = -1L
+        var stuckSince = 0L
+        while (true) {
+            delay(2_000)
+            val now = SystemClock.elapsedRealtime()
+            val state = player.playbackState
+
+            // Kullanici duraklattiysa nobet tutmuyoruz.
+            if (!player.playWhenReady || state == Player.STATE_IDLE) {
+                lastPos = -1L
+                stuckSince = 0L
+                continue
+            }
+
+            val stuck = when (state) {
+                // Suresiz arabellek doldurma. Canli yayinda 12 saniye
+                // boyunca arabellek dolamiyorsa kaynak beslemiyor demektir.
+                // PlayerView'in gostergesi varsayilan olarak kapali oldugu
+                // icin bu durum ekrana hic yansimiyordu: kullanici donmus
+                // bir kare goruyor, uygulama ise sessizce bekliyordu.
+                Player.STATE_BUFFERING -> true
+
+                // READY ve oynuyor gorunuyor ama konum ilerlemiyor: veri
+                // akisi kesilmis ama soket ne kapanmis ne de zaman asimina
+                // ugramis. Okuma yapilmadigi icin zaman asimi hic islemez.
+                Player.STATE_READY -> {
+                    val pos = player.currentPosition
+                    val frozen = pos == lastPos
+                    lastPos = pos
+                    frozen
+                }
+
+                else -> false
+            }
+
+            if (!stuck) {
+                stuckSince = 0L
+                continue
+            }
+            if (stuckSince == 0L) {
+                stuckSince = now
+            } else if (now - stuckSince >= LIVE_STALL_TIMEOUT_MS) {
+                stuckSince = 0L
+                lastPos = -1L
+                recoverTick++
+            }
+        }
+    }
+
     LaunchedEffect(speed) {
         player.playbackParameters = PlaybackParameters(speed)
     }
@@ -690,7 +794,25 @@ fun PlayerScreen(
                             stats.startedAt = 0L
                         }
                         stats.wasReady = true
+                        // Baglanti geri geldi: artan beklemeyi sifirla.
+                        recovering = false
+                        recoverAttempt = 0
                     }
+                    // Canli yayin bitmez.
+                    //
+                    // Sunucu baglantiyi kapattiginda soket CLOSE_WAIT'e
+                    // duser ve okuma zaman asimina UGRAMAZ; temiz bir EOF
+                    // doner. media3 bunu hata degil "yayin bitti" olarak
+                    // yorumlar, yani onPlayerError tetiklenmez, yeniden
+                    // deneme politikasi devreye girmez ve STATE_BUFFERING
+                    // olmadigi icin gosterge de cikmaz.
+                    //
+                    // Cihazda olculen donma tam olarak buydu: veri akisi
+                    // durdu, soketler CLOSE_WAIT'te kaldi, son kare
+                    // ekranda dondu, log bos kaldi ve oynatici dakikalarca
+                    // kendini toparlamadi. Hicbir yerde ele alinmadigi
+                    // icin sessizce bekliyordu.
+                    Player.STATE_ENDED -> if (live) recoverTick++
                 }
             }
 
@@ -706,6 +828,8 @@ fun PlayerScreen(
                 current = i
                 error = ""
                 triedFallback = false
+                recovering = false
+                recoverAttempt = 0
                 stats.reset()
                 if (reason != Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT && hasList) {
                     notice = titleAt(i)
@@ -769,6 +893,12 @@ fun PlayerScreen(
                 PlayerView(c).apply {
                     this.player = player
                     useController = true
+                    // Varsayilan SHOW_BUFFERING_NEVER idi: arabellek
+                    // dolarken ekranda hicbir isaret cikmiyordu, bu yuzden
+                    // donma ile bekleme birbirinden ayirt edilemiyordu.
+                    // Bu gosterge View tabanli, yani Compose'un yeniden
+                    // cizim dongusunu beslemiyor.
+                    setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
                     setShowSubtitleButton(true)
                     setShowNextButton(hasList)
                     setShowPreviousButton(hasList)
@@ -894,6 +1024,27 @@ fun PlayerScreen(
                     .clip(RoundedCornerShape(8.dp))
                     .background(Color(0xB3000000))
                     .padding(horizontal = 16.dp, vertical = 9.dp)
+            )
+        }
+
+        // Kopma sirasinda ekran sadece donuyordu; kullanici uygulamanin
+        // calistigini bile anlayamiyordu. Sonsuz animasyonlu bir gosterge
+        // yerine statik yazi: bos cizimi ayakta tutmasin.
+        if (recovering && error.isEmpty()) {
+            Text(
+                if (recoverAttempt > 1) {
+                    "Yayın koptu, yeniden bağlanılıyor… ($recoverAttempt)"
+                } else {
+                    "Yayın koptu, yeniden bağlanılıyor…"
+                },
+                color = Color(0xFFFFC46B),
+                fontSize = 13.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0xCC000000))
+                    .padding(horizontal = 16.dp, vertical = 10.dp)
             )
         }
 
