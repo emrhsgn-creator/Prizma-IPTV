@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Indirilen APK'yi kurulum ekranina verebilmek icin. Android 7'den itibaren
+  dogrudan file:// URI'si paylasilamiyor, FileProvider zorunlu.
+-->
+<paths>
+    <cache-path name="updates" path="updates/" />
+</paths>

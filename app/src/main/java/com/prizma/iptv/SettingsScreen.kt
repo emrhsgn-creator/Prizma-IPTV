@@ -28,6 +28,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -38,6 +39,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
 
 @Composable
 fun SettingsScreen(
@@ -51,6 +53,9 @@ fun SettingsScreen(
     var rev by remember { mutableIntStateOf(0) }
     var buffer by remember { mutableIntStateOf(Prefs.bufferSeconds(ctx)) }
     var autoNext by remember { mutableStateOf(Prefs.autoNext(ctx)) }
+
+    val scope = rememberCoroutineScope()
+    var update by remember { mutableStateOf<UpdateState>(UpdateState.Idle) }
 
     val profiles = remember(rev) { Prefs.profiles(ctx) }
     val activeKey = remember(rev) { Prefs.activeKey(ctx) }
@@ -197,6 +202,129 @@ fun SettingsScreen(
                 }
             }
 
+            Section("Güncelleme")
+            Card {
+                InfoRow(
+                    "Yüklü sürüm",
+                    Updater.installedVersionName(ctx) +
+                        " (" + Updater.installedVersionCode(ctx) + ")"
+                )
+                Spacer(Modifier.height(4.dp))
+
+                when (val u = update) {
+                    is UpdateState.Checking ->
+                        InfoRow("Durum", "Denetleniyor…")
+
+                    is UpdateState.Downloading ->
+                        InfoRow("İndiriliyor", "%" + u.percent)
+
+                    is UpdateState.UpToDate -> {
+                        InfoRow("Durum", "Güncel")
+                        ActionRow("Yeniden denetle") { update = UpdateState.Idle }
+                    }
+
+                    is UpdateState.Available -> {
+                        InfoRow(
+                            "Yeni sürüm",
+                            u.release.versionName + " (" + u.release.versionCode + ")"
+                        )
+                        if (u.release.notes.isNotEmpty()) {
+                            Text(
+                                u.release.notes.lineSequence().take(6).joinToString("\n"),
+                                color = Color(0xFF8A90A0),
+                                fontSize = 10.sp,
+                                lineHeight = 14.sp,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
+                            )
+                        }
+                        ActionRow("İndir ve kur") {
+                            scope.launch {
+                                update = UpdateState.Downloading(0)
+                                try {
+                                    val f = Updater.download(ctx, u.release) { p ->
+                                        update = UpdateState.Downloading(p)
+                                    }
+                                    update = if (Updater.canInstall(ctx)) {
+                                        UpdateState.Ready(u.release, f)
+                                    } else {
+                                        UpdateState.NeedsPermission(u.release, f)
+                                    }
+                                } catch (e: Exception) {
+                                    update = UpdateState.Failed(e.message ?: "İndirilemedi")
+                                }
+                            }
+                        }
+                    }
+
+                    is UpdateState.Ready -> {
+                        InfoRow("Hazır", u.release.versionName)
+                        ActionRow("Kurulumu başlat") {
+                            runCatching { Updater.install(ctx, u.file) }
+                                .onFailure {
+                                    update = UpdateState.Failed(
+                                        it.message ?: "Kurulum ekranı açılamadı"
+                                    )
+                                }
+                        }
+                    }
+
+                    is UpdateState.NeedsPermission -> {
+                        Text(
+                            "Kurulum için bir kez izin vermen gerekiyor: açılan ekranda " +
+                                "Prizma IPTV için \"bilinmeyen uygulamaları yükle\" seçeneğini " +
+                                "aç, sonra buraya dönüp kurulumu başlat.",
+                            color = Color(0xFF8A90A0),
+                            fontSize = 10.sp,
+                            lineHeight = 14.sp,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
+                        )
+                        ActionRow("İzin ekranını aç") {
+                            if (!Updater.openInstallPermission(ctx)) {
+                                Toast.makeText(
+                                    ctx,
+                                    "Ayarlar → Uygulamalar → Prizma IPTV → " +
+                                        "Bilinmeyen uygulamaları yükle",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        }
+                        ActionRow("İzni verdim, kur") {
+                            if (Updater.canInstall(ctx)) {
+                                update = UpdateState.Ready(u.release, u.file)
+                                runCatching { Updater.install(ctx, u.file) }
+                            } else {
+                                Toast.makeText(
+                                    ctx,
+                                    "İzin hâlâ kapalı görünüyor",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        }
+                    }
+
+                    is UpdateState.Failed -> {
+                        InfoRow("Hata", u.message)
+                        ActionRow("Yeniden dene") { update = UpdateState.Idle }
+                    }
+
+                    UpdateState.Idle -> ActionRow("Güncellemeleri denetle") {
+                        scope.launch {
+                            update = UpdateState.Checking
+                            update = try {
+                                val r = Updater.check()
+                                if (r.versionCode > Updater.installedVersionCode(ctx)) {
+                                    UpdateState.Available(r)
+                                } else {
+                                    UpdateState.UpToDate(Updater.installedVersionName(ctx))
+                                }
+                            } catch (e: Exception) {
+                                UpdateState.Failed(e.message ?: "Denetlenemedi")
+                            }
+                        }
+                    }
+                }
+            }
+
             Section("Veri")
             Card {
                 InfoRow("Favoriler", "$favCount kayıt")
@@ -268,6 +396,21 @@ private fun InfoRow(label: String, value: String) {
             overflow = TextOverflow.Ellipsis
         )
     }
+}
+
+@Composable
+private fun ActionRow(label: String, onClick: () -> Unit) {
+    Text(
+        label,
+        color = PrizmaAccent,
+        fontSize = 12.sp,
+        fontWeight = FontWeight.Medium,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 11.dp)
+    )
 }
 
 @Composable

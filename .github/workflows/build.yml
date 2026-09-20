@@ -8,6 +8,11 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Release yayinlamak icin gerekli. Uygulama ici guncelleme
+    # Actions artifact'ina ulasamaz (giris ister), Release varligina
+    # ulasir.
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -95,3 +100,42 @@ jobs:
         with:
           name: prizma-iptv-apk
           path: app/build/outputs/apk/release/*.apk
+
+      - name: Surum bilgisini oku
+        id: ver
+        run: |
+          set -eu
+          NAME=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts)
+          CODE=$(grep -oP 'versionCode = \K[0-9]+' app/build.gradle.kts)
+          test -n "$NAME" && test -n "$CODE"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "code=$CODE" >> "$GITHUB_OUTPUT"
+          echo "Surum $NAME ($CODE)"
+
+      # Uygulama surum karsilastirmasini APK adindaki versionCode ile yapiyor.
+      # Surum ADI ile karsilastirma yanilticidir: "0.5.10" metin olarak
+      # "0.5.9"dan kucuk cikar.
+      - name: APK'yi adlandir
+        id: apk
+        run: |
+          set -eu
+          SRC=$(ls app/build/outputs/apk/release/*.apk | head -1)
+          DST="prizma-${{ steps.ver.outputs.name }}-${{ steps.ver.outputs.code }}.apk"
+          cp "$SRC" "$DST"
+          echo "file=$DST" >> "$GITHUB_OUTPUT"
+
+      - name: Release yayinla
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          TAG="v${{ steps.ver.outputs.name }}"
+          FILE="${{ steps.apk.outputs.file }}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$FILE" --clobber
+          else
+            gh release create "$TAG" "$FILE" \
+              --target "$GITHUB_SHA" \
+              --title "$TAG" \
+              --notes "Surum ${{ steps.ver.outputs.name }} (${{ steps.ver.outputs.code }})"
+          fi
