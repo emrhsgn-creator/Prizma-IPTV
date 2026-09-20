@@ -22,7 +22,11 @@ android {
         versionName = "0.4.3"
 
         if (ffmpegReady) {
-            ndk { abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64") }
+            // Hedef cihazlar Android TV kutulari ve stickler; hepsi ARM.
+            // x86/x86_64 FFmpeg kitapliklari APK'yi buyutuyor ama hicbir
+            // cihazda kullanilmiyor. Olcum cihazi (Amlogic S905) 32-bit
+            // ARM, yani armeabi-v7a.
+            ndk { abiFilters += listOf("armeabi-v7a", "arm64-v8a") }
         }
     }
 
@@ -97,6 +101,5 @@ dependencies {
     compileOnly("org.checkerframework:checker-qual:3.42.0")
     implementation("androidx.media3:media3-exoplayer-hls:1.4.1")
     implementation("androidx.media3:media3-ui:1.4.1")
-    implementation("io.coil-kt:coil-compose:2.7.0")
     implementation("io.coil-kt:coil-gif:2.7.0")
 }
