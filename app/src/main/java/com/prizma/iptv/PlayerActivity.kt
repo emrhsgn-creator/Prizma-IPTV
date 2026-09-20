@@ -169,16 +169,34 @@ private const val LIVE_RETRY_COUNT = 3
  * o durumu yakalar. Arabellek derinliginden (varsayilan 30 sn) kisa
  * tutuluyor ki arabellek tukenmeden once yeniden baglanma baslasin.
  */
-private const val LIVE_STALL_TIMEOUT_MS = 12_000L
+private const val LIVE_STALL_TIMEOUT_MS = 6_000L
+
+/**
+ * Tukenmek uzere sayilan arabellek derinligi.
+ *
+ * Olcumde kesilme sirasi su: once veri durur, sonra ~15-26 saniye elde
+ * kalan tamponla oynanir, ancak ondan sonra goruntu donar. Donmayi
+ * bekleyip tepki vermek bu payi bosa harcamak demek.
+ *
+ * Arabellek bu esigin altina inmis VE artmiyorsa besleme kesilmis
+ * demektir. O anda yeniden baglanirsak elde hala birkac saniyelik tampon
+ * var ve kullanici cogu zaman hicbir kesinti gormez. Saglikli oynatmada
+ * arabellek hedefine yakin durur (varsayilan 30 sn), bu yuzden esik yanlis
+ * alarm uretmez. Acilista da uretmez: arabellek artarken "artmiyor"
+ * kosulu saglanmaz.
+ */
+private const val LIVE_LOW_BUFFER_MS = 5_000L
 
 /**
  * Yeniden baglanma denemeleri arasindaki artan bekleme.
  *
- * Son deger tekrarlanir: canli yayinda pes etmek dogru degil (mac
- * ortasinda kullanici ekranin basinda), ama 15 saniyeden sik denemek de
- * hesabin es zamanli baglanti haklarini tuketir.
+ * Ilk deneme beklemesiz: kullanicinin karsilastirdigi diger istemci de
+ * kesintide hemen yeniden baglaniyor ve donma boylece gorunmez kaliyor.
+ * Sonraki denemeler artiyor, son deger tekrarlanir. Pes etmiyoruz (mac
+ * ortasinda kullanici ekranin basinda olabilir) ama 15 saniyeden sik
+ * denemek de hesabin es zamanli baglanti haklarini tuketir.
  */
-private val LIVE_RECOVER_DELAYS_MS = longArrayOf(1_000, 2_000, 4_000, 8_000, 15_000)
+private val LIVE_RECOVER_DELAYS_MS = longArrayOf(0, 1_000, 3_000, 6_000, 15_000)
 
 /**
  * Canli yayin icin kisa ve sabit yeniden deneme gecikmesi. Yeniden denenmemesi
@@ -695,6 +713,7 @@ fun PlayerScreen(
     LaunchedEffect(live) {
         if (!live) return@LaunchedEffect
         var lastPos = -1L
+        var lastBuffered = Long.MAX_VALUE
         var stuckSince = 0L
         while (true) {
             delay(2_000)
@@ -704,26 +723,37 @@ fun PlayerScreen(
             // Kullanici duraklattiysa nobet tutmuyoruz.
             if (!player.playWhenReady || state == Player.STATE_IDLE) {
                 lastPos = -1L
+                lastBuffered = Long.MAX_VALUE
                 stuckSince = 0L
                 continue
             }
 
             val stuck = when (state) {
-                // Suresiz arabellek doldurma. Canli yayinda 12 saniye
+                // Suresiz arabellek doldurma. Canli yayinda esik sure
                 // boyunca arabellek dolamiyorsa kaynak beslemiyor demektir.
                 // PlayerView'in gostergesi varsayilan olarak kapali oldugu
                 // icin bu durum ekrana hic yansimiyordu: kullanici donmus
                 // bir kare goruyor, uygulama ise sessizce bekliyordu.
                 Player.STATE_BUFFERING -> true
 
-                // READY ve oynuyor gorunuyor ama konum ilerlemiyor: veri
-                // akisi kesilmis ama soket ne kapanmis ne de zaman asimina
-                // ugramis. Okuma yapilmadigi icin zaman asimi hic islemez.
                 Player.STATE_READY -> {
+                    // READY ve oynuyor gorunuyor ama konum ilerlemiyor:
+                    // veri akisi kesilmis, soket ne kapanmis ne de zaman
+                    // asimina ugramis. Okuma yapilmadigi icin zaman asimi
+                    // hic islemez.
                     val pos = player.currentPosition
                     val frozen = pos == lastPos
                     lastPos = pos
-                    frozen
+
+                    // Goruntu daha donmadan yakalamak icin: arabellek
+                    // esigin altina inmis ve artmiyorsa besleme kesilmis
+                    // demektir. Elde hala birkac saniye varken yeniden
+                    // baglanirsak kesinti ekrana hic yansimaz.
+                    val buffered = player.totalBufferedDuration
+                    val draining = buffered < LIVE_LOW_BUFFER_MS && buffered <= lastBuffered
+                    lastBuffered = buffered
+
+                    frozen || draining
                 }
 
                 else -> false
@@ -738,6 +768,7 @@ fun PlayerScreen(
             } else if (now - stuckSince >= LIVE_STALL_TIMEOUT_MS) {
                 stuckSince = 0L
                 lastPos = -1L
+                lastBuffered = Long.MAX_VALUE
                 recoverTick++
             }
         }
