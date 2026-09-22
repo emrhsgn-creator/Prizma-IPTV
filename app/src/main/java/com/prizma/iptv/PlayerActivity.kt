@@ -2,6 +2,8 @@ package com.prizma.iptv
 
 import android.content.Context
 import android.content.Intent
+import android.net.wifi.WifiManager
+import android.os.Build
 import android.os.Bundle
 import android.os.SystemClock
 import android.animation.AnimatorInflater
@@ -307,9 +309,42 @@ class PlayerActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * Oynatma boyunca Wi-Fi radyosunu uyanik tutar.
+     *
+     * FLAG_KEEP_SCREEN_ON ekrani acik tutuyor ama Wi-Fi radyosunu degil.
+     * Cihazda olculen bir oruntu vardi: kopmalar yalnizca hicbir sey
+     * cihaza dokunmadigi "sessiz" kosularda goruldu, adb'nin surekli
+     * yokladigi izlemeli kosularda hic gorulmedi. Mac izlerken kumandaya
+     * dokunmayan kullanici tam o duruma dusuyor.
+     *
+     * Bu bir hipotez: korelasyon olcum yonteminden de kaynaklanabilir.
+     * Ama TV stick prize takili calisiyor, yani kilidin guc maliyeti yok
+     * ve fayda ihtimali gercek.
+     */
+    private var wifiLock: WifiManager.WifiLock? = null
+
+    private fun acquireWifiLock() {
+        wifiLock = runCatching {
+            val wm = applicationContext
+                .getSystemService(Context.WIFI_SERVICE) as WifiManager
+            val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                WifiManager.WIFI_MODE_FULL_LOW_LATENCY
+            } else {
+                @Suppress("DEPRECATION")
+                WifiManager.WIFI_MODE_FULL_HIGH_PERF
+            }
+            wm.createWifiLock(mode, "PrizmaIPTV:playback").apply {
+                setReferenceCounted(false)
+                acquire()
+            }
+        }.getOrNull()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        acquireWifiLock()
         setContent {
             MaterialTheme(colorScheme = darkColorScheme(primary = PrizmaAccent)) {
                 PlayerScreen(
@@ -327,6 +362,8 @@ class PlayerActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        runCatching { wifiLock?.takeIf { it.isHeld }?.release() }
+        wifiLock = null
         PlayerBus.onKey = null
         super.onDestroy()
     }
@@ -1507,11 +1544,13 @@ private fun SettingsPanel(
                 OptRow("HLS (m3u8) · varsayılan", hls) { onHls(true) }
                 OptRow("TS", !hls) { onHls(false) }
                 Text(
-                    "TS tek sürekli bağlantıdır: oynatıcı canlı ucun hemen " +
-                        "arkasında kalır, elinde yastık olmadığı için sunucunun " +
-                        "her duraklaması donma olur. HLS parçaları ileriden " +
-                        "indirir, donmayı bu önler. Bedeli canlı yayının biraz " +
-                        "geriden gelmesidir.",
+                    "HLS parçaları ayrı ayrı indirir; yayın koptuğunda uygulama " +
+                        "yeniden bağlanırken görüntü geri sıçramaz. TS ise tek " +
+                        "sürekli bağlantıdır: kopmayı daha hızlı fark ettirir, ama " +
+                        "her yeniden bağlanmada sunucu kendi tamponunun başından " +
+                        "gönderdiği için 1-2 saniyelik geri sıçrama olur. Sık kopan " +
+                        "bir sağlayıcıda bu sürekli tekrar gibi görünür. Emin " +
+                        "değilsen HLS'te kal.",
                     color = Color(0xFF6E7686),
                     fontSize = 10.sp,
                     lineHeight = 14.sp
