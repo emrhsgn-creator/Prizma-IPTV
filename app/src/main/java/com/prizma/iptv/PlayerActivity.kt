@@ -704,8 +704,10 @@ fun PlayerScreen(
                     } else false
                 }
                 KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
+                    // Tuketilmeli: false donunce ayni tus PlayerView'a da
+                    // gidiyor, o da tiklama sayip cubugu hemen geri kapatiyor.
                     viewRef?.showController()
-                    false
+                    true
                 }
                 KeyEvent.KEYCODE_CHANNEL_UP, KeyEvent.KEYCODE_PAGE_UP -> {
                     jump(-1)
