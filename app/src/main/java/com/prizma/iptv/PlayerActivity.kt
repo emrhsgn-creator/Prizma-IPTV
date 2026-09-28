@@ -164,6 +164,18 @@ private const val LIVE_RETRY_DELAY_MS = 1500L
 private const val LIVE_RETRY_COUNT = 3
 
 /**
+ * Kanal degisiminden sonra 403 icin bekleme.
+ *
+ * Yukaridaki "403'te yeniden deneme yok" karari kalici 403'ler icindi ve
+ * hala gecerli: bu yol yalnizca kanal acildiktan sonraki ilk
+ * SLOT_WAIT_WINDOW_MS icinde gelen 403'te devreye giriyor. Bir 403 yaniti
+ * sunucuda slot tutmaz; bekleme sirasinda baglanti acik degil.
+ */
+private const val SLOT_WAIT_WINDOW_MS = 20_000L
+private const val SLOT_WAIT_DELAY_MS = 4_000L
+private const val SLOT_WAIT_TRIES = 3
+
+/**
  * Canli yayinda oynatmanin durdugunu kabul etmeden once beklenen sure.
  *
  * Sunucu baglantiyi kapatmadan sessizce susarsa EOF gelmez, dolayisiyla
@@ -466,8 +478,17 @@ fun PlayerScreen(
     var subSize by remember { mutableFloatStateOf(0.06f) }
     var tracks by remember { mutableStateOf<Tracks?>(null) }
     var viewRef by remember { mutableStateOf<PlayerView?>(null) }
-    var barVisible by remember { mutableStateOf(true) }
+    // Cubuk gorunur olunca dinleyici bunu true yapar. Onceden true
+    // basliyordu: canli yayin dogrudan oynamaya basladiginda cubuk hic
+    // gorunmedigi icin dinleyici tetiklenmiyor, deger true kaliyordu. Sonuc:
+    // yukari/asagi ile kanal degistirme calismiyor, geri tusu ilk basista
+    // gorunmeyen cubugu "kapatiyordu".
+    var barVisible by remember { mutableStateOf(false) }
     var triedFallback by remember { mutableStateOf(false) }
+    // Kanal degisiminden hemen sonra gelen 403 icin bekleme sayaci.
+    var slotWaits by remember { mutableIntStateOf(0) }
+    var slotWaitTick by remember { mutableIntStateOf(0) }
+    var switchedAt by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
     // Canli yayin kopmasindan sonra yeniden baglanma durumu.
     var recoverTick by remember { mutableIntStateOf(0) }
     var recoverAttempt by remember { mutableIntStateOf(0) }
@@ -651,6 +672,10 @@ fun PlayerScreen(
         val n = urls.size
         val target = ((player.currentMediaItemIndex + delta) % n + n) % n
         player.seekTo(target, 0L)
+        // Hata sonrasi oynatici IDLE'da kalir; seekTo onu tek basina
+        // yeniden baslatmaz. Bir kanal hata verince kanal degistirme
+        // tamamen oluyor, oynaticidan cikip girmek gerekiyordu.
+        if (player.playbackState == Player.STATE_IDLE) player.prepare()
         player.playWhenReady = true
     }
 
@@ -760,6 +785,16 @@ fun PlayerScreen(
         player.playWhenReady = true
     }
 
+    /** Kanal degisiminden sonraki 403'te bekleyip ayni kanali yeniden acar. */
+    LaunchedEffect(slotWaitTick) {
+        if (slotWaitTick == 0) return@LaunchedEffect
+        delay(SLOT_WAIT_DELAY_MS)
+        if (player.playbackState == Player.STATE_IDLE) {
+            player.prepare()
+            player.playWhenReady = true
+        }
+    }
+
     /**
      * Sessiz susma nobetcisi.
      *
@@ -845,6 +880,22 @@ fun PlayerScreen(
                 // slot daha harcar ve sinirin acilmasini geciktirir.
                 val forbidden = (e.cause as? HttpDataSource.InvalidResponseCodeException)
                     ?.responseCode == 403
+                // Tek baglantili hesapta onceki kanalin HLS oturumu sunucuda
+                // birkac saniye daha sayiliyor; hemen acilan kanal 403 aliyor.
+                // Cihazda olculdu: TV 8 kanal tusuyla gecince 403, bir dakika
+                // sonra listeden acinca sorunsuz. Bu yuzden yalnizca kanal
+                // degisiminden hemen sonraki 403'te, sinirli sayida bekleyip
+                // tekrar deneniyor. Kalici 403 veren kanal en fazla
+                // SLOT_WAIT_TRIES deneme harcar.
+                if (live && forbidden && slotWaits < SLOT_WAIT_TRIES &&
+                    (slotWaits > 0 ||
+                        SystemClock.elapsedRealtime() - switchedAt < SLOT_WAIT_WINDOW_MS)
+                ) {
+                    slotWaits++
+                    slotWaitTick++
+                    notice = "Önceki bağlantının kapanması bekleniyor ($slotWaits/$SLOT_WAIT_TRIES)"
+                    return
+                }
                 if (live && !triedFallback && !forbidden &&
                     (url.endsWith(".ts") || url.endsWith(".m3u8"))
                 ) {
@@ -941,6 +992,8 @@ fun PlayerScreen(
                 current = i
                 error = ""
                 triedFallback = false
+                slotWaits = 0
+                switchedAt = SystemClock.elapsedRealtime()
                 recovering = false
                 recoverAttempt = 0
                 stats.reset()

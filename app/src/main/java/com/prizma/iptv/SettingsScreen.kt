@@ -1,6 +1,7 @@
 package com.prizma.iptv
 
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -50,6 +51,9 @@ fun SettingsScreen(
     onClearCache: () -> Unit
 ) {
     val ctx = LocalContext.current
+    // Ayarlar ayri bir Activity degil; bu olmadan geri tusu uygulamadan
+    // cikip Android TV ana ekranina atiyordu.
+    BackHandler(onBack = onBack)
     var rev by remember { mutableIntStateOf(0) }
     var buffer by remember { mutableIntStateOf(Prefs.bufferSeconds(ctx)) }
     var autoNext by remember { mutableStateOf(Prefs.autoNext(ctx)) }
