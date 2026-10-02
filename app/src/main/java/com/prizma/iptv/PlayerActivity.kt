@@ -882,6 +882,19 @@ fun PlayerScreen(
                 // slot daha harcar ve sinirin acilmasini geciktirir.
                 val forbidden = (e.cause as? HttpDataSource.InvalidResponseCodeException)
                     ?.responseCode == 403
+                // Oynayan bir canli yayin koptuysa ya da yeniden baglanma
+                // suruyorsa kaynak hatasinda pes etmiyoruz: kopmayi izleyen
+                // denemede sunucu eski baglantinin slotunu henuz birakmamis
+                // oluyor ve 403 donuyor. Cihazda mac sirasinda olculdu: yeniden
+                // baglanma 403 aldi, bu hata asagidaki "Oynatilamadi" dalina
+                // dustu ve yayin kullanici geri cikana kadar donuk kaldi.
+                // 2xxx ag ve HTTP kaynak hatalaridir; cozucu ya da bicim
+                // hatasinda yeniden baglanmak bir sey degistirmez. 403 yaniti
+                // sunucuda slot tutmadigi icin artan bekleme hesabi zorlamaz.
+                if (live && e.errorCode in 2000..2999 && (recovering || stats.wasReady)) {
+                    recoverTick++
+                    return
+                }
                 // Tek baglantili hesapta onceki kanalin HLS oturumu sunucuda
                 // birkac saniye daha sayiliyor; hemen acilan kanal 403 aliyor.
                 // Cihazda olculdu: TV 8 kanal tusuyla gecince 403, bir dakika
