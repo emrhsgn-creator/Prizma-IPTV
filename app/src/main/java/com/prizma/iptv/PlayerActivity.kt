@@ -492,6 +492,11 @@ fun PlayerScreen(
                     DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON
                 )
             )
+            // WiFi ve CPU'nun oynatma sirasinda uyku moduna girmesini engeller.
+            // WAKE_MODE_NETWORK hem CPU wake lock hem de WiFi wake lock tutar;
+            // bu olmazsa bazi TV kutusu ve cihazlarda ag adaptoru ~90 saniyede
+            // bir uyuyor ve kisa ama tekrarlayan donmalara neden oluyor.
+            .setWakeMode(C.WAKE_MODE_NETWORK)
             .setSeekBackIncrementMs(10_000)
             .setSeekForwardIncrementMs(30_000)
             .setMediaSourceFactory(
