@@ -69,6 +69,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -210,6 +211,8 @@ fun HomeScreen(
         ctx.packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
     }
     val firstTab = remember { FocusRequester() }
+    val searchFocus = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
     val cache = remember { mutableStateMapOf<Section, SectionData>() }
 
     var tab by remember { mutableIntStateOf(0) }
@@ -331,6 +334,10 @@ fun HomeScreen(
                 Spacer(Modifier.width(8.dp))
 
                 if (searching) {
+                    LaunchedEffect(Unit) {
+                        runCatching { searchFocus.requestFocus() }
+                        keyboard?.show()
+                    }
                     TextField(
                         value = query,
                         onValueChange = { query = it },
@@ -347,6 +354,7 @@ fun HomeScreen(
                         modifier = Modifier
                             .weight(1f)
                             .height(48.dp)
+                            .focusRequester(searchFocus)
                     )
                     IconButton(onClick = { searching = false; query = "" }) {
                         Icon(Icons.Default.Close, null, tint = Color.White)
