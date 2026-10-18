@@ -42,11 +42,13 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
@@ -113,6 +115,14 @@ private suspend fun fetchSection(
 }
 
 private fun ratingOf(s: String): Double = s.replace(',', '.').toDoubleOrNull() ?: 0.0
+
+private fun formatCatName(name: String): String {
+    if (name.any { it.isLowerCase() }) return name
+    return name.split(" ").joinToString(" ") { word ->
+        if (word.isEmpty()) word
+        else word[0].uppercaseChar() + word.substring(1).lowercase(java.util.Locale("tr", "TR"))
+    }
+}
 
 private fun StreamItem.toTile(sec: String) =
     Tile(id, name, icon, extension, rating, sec, 0f, added)
@@ -225,6 +235,7 @@ fun HomeScreen(
     var localRev by remember { mutableIntStateOf(0) }
     var sortMode by remember { mutableStateOf(SortMode.MANUAL) }
     var homeReady by remember { mutableStateOf(false) }
+    var showLogoutDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         Creds.host = host
@@ -403,8 +414,26 @@ fun HomeScreen(
                     IconButton(onClick = onSettings) {
                         Icon(Icons.Default.Settings, null, tint = Color.White)
                     }
-                    IconButton(onClick = onLogout) {
+                    IconButton(onClick = { showLogoutDialog = true }) {
                         Icon(Icons.Default.ExitToApp, null, tint = Color.White)
+                    }
+
+                    if (showLogoutDialog) {
+                        AlertDialog(
+                            onDismissRequest = { showLogoutDialog = false },
+                            title = { Text("Çıkış Yap") },
+                            text = { Text("Hesabından çıkmak istediğine emin misin?") },
+                            confirmButton = {
+                                TextButton(onClick = {
+                                    showLogoutDialog = false
+                                    clearDeadPreviews()
+                                    onLogout()
+                                }) { Text("Çıkış Yap") }
+                            },
+                            dismissButton = {
+                                TextButton(onClick = { showLogoutDialog = false }) { Text("İptal") }
+                            }
+                        )
                     }
                 }
             }
@@ -469,12 +498,20 @@ fun HomeScreen(
                                 SortMode.ADDED -> base.sortedByDescending { it.order }
                             }.filter { q.isEmpty() || it.name.contains(q, true) }
                         }
-                        else -> data.items
-                            .filter { s ->
-                                (selectedCat.isEmpty() || s.categoryId == selectedCat) &&
-                                    (q.isEmpty() || s.name.contains(q, true))
+                        else -> {
+                            val base = data.items
+                                .filter { s ->
+                                    (selectedCat.isEmpty() || s.categoryId == selectedCat) &&
+                                        (q.isEmpty() || s.name.contains(q, true))
+                                }
+                                .map { it.toTile(sec.name) }
+                            when (sortMode) {
+                                SortMode.MANUAL -> base
+                                SortMode.NAME -> base.sortedBy { it.name.lowercase() }
+                                SortMode.RATING -> base.sortedByDescending { ratingOf(it.rating) }
+                                SortMode.ADDED -> base.sortedByDescending { it.order }
                             }
-                            .map { it.toTile(sec.name) }
+                        }
                     }
                 }
 
@@ -517,7 +554,7 @@ fun HomeScreen(
 
                 val body: @Composable () -> Unit = {
                     Column(Modifier.fillMaxSize()) {
-                        if (showingFav) {
+                        if (!showingHist) {
                             LazyRow(
                                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -581,7 +618,7 @@ fun HomeScreen(
                                     }
                                 }
                                 items(data.categories) { c ->
-                                    SideRow(c.name, c.count, selectedCat == c.id) {
+                                    SideRow(formatCatName(c.name), c.count, selectedCat == c.id) {
                                         selectedCat = c.id
                                     }
                                 }
@@ -615,7 +652,7 @@ fun HomeScreen(
                                 Chip("TÜMÜ", selectedCat.isEmpty()) { selectedCat = "" }
                             }
                             items(data.categories) { c ->
-                                Chip("${c.name} (${c.count})", selectedCat == c.id) {
+                                Chip("${formatCatName(c.name)} (${c.count})", selectedCat == c.id) {
                                     selectedCat = c.id
                                 }
                             }

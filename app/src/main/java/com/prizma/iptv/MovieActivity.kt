@@ -256,6 +256,28 @@ fun MovieScreen(
                         )
                     }
 
+                    if (resume > 0) {
+                        Row(
+                            Modifier
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(PrizmaSurface)
+                                .clickable {
+                                    val e = if (realExt.isNotEmpty()) realExt else "mp4"
+                                    PlayerActivity.start(
+                                        ctx, "$host/movie/$user/$pass/$vodId.$e", name,
+                                        Section.VOD.name, vodId, icon, e, false
+                                    )
+                                }
+                                .padding(horizontal = 14.dp, vertical = 13.dp),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("↺", color = Color.White, fontSize = 14.sp)
+                            Spacer(Modifier.width(6.dp))
+                            Text("Baştan", color = Color.White, fontSize = 13.sp)
+                        }
+                    }
+
                     Box(
                         Modifier
                             .clip(RoundedCornerShape(10.dp))

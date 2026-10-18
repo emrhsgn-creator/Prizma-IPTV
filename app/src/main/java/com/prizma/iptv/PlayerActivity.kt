@@ -395,21 +395,28 @@ class PlayerActivity : ComponentActivity() {
 @OptIn(UnstableApi::class)
 private fun errorDetail(e: PlaybackException): String {
     val cause = e.cause
-    val extra = when {
-        cause is HttpDataSource.InvalidResponseCodeException ->
-            if (cause.responseCode == 403) {
-                "HTTP 403 · hesabin es zamanli baglanti siniri dolmus olabilir"
-            } else {
-                "HTTP ${cause.responseCode}"
-            }
-        cause != null -> {
-            val m = cause.message?.trim().orEmpty()
-            if (m.isEmpty()) cause.javaClass.simpleName
-            else "${cause.javaClass.simpleName}: ${m.take(140)}"
+    if (cause is HttpDataSource.InvalidResponseCodeException) {
+        return when (cause.responseCode) {
+            403 -> "Bağlantı sınırı doldu — eş zamanlı izleme sayısı aşıldı."
+            404 -> "Kanal bulunamadı — yayın kaldırılmış olabilir."
+            401 -> "Yetki hatası — oturum süresi dolmuş olabilir."
+            503, 502 -> "Sunucu şu an meşgul, lütfen tekrar dene."
+            else -> "Sunucu hatası (HTTP ${cause.responseCode})"
         }
-        else -> ""
     }
-    return if (extra.isEmpty()) e.errorCodeName else "${e.errorCodeName} · $extra"
+    val msg = cause?.message?.trim().orEmpty()
+    return when {
+        e.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED ||
+        e.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT ->
+            "Ağ bağlantısı kesildi, lütfen bekle..."
+        e.errorCode == PlaybackException.ERROR_CODE_DECODER_INIT_FAILED ||
+        e.errorCode == PlaybackException.ERROR_CODE_DECODER_QUERY_FAILED ->
+            "Video çözücü başlatılamadı."
+        msg.contains("Source error", ignoreCase = true) ||
+        msg.contains("Unable to connect", ignoreCase = true) ->
+            "Yayın kaynağına bağlanılamadı."
+        else -> "Oynatılamadı (${e.errorCodeName})"
+    }
 }
 
 @OptIn(UnstableApi::class)
@@ -928,7 +935,7 @@ fun PlayerScreen(
                     player.playWhenReady = true
                     notice = "Alternatif format deneniyor"
                 } else {
-                    error = "Oynatılamadı: ${errorDetail(e)}"
+                    error = errorDetail(e)
                 }
             }
 

@@ -136,6 +136,8 @@ private val deadPreviewIds: MutableSet<String> = java.util.Collections.newSetFro
     java.util.concurrent.ConcurrentHashMap<String, Boolean>()
 )
 
+internal fun clearDeadPreviews() { deadPreviewIds.clear() }
+
 /**
  * Onizleme icin yukleme hatasi politikasi.
  *
