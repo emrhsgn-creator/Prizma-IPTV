@@ -194,12 +194,15 @@ private const val LIVE_STALL_TIMEOUT_MS = 6_000L
  *
  * Arabellek bu esigin altina inmis VE artmiyorsa besleme kesilmis
  * demektir. O anda yeniden baglanirsak elde hala birkac saniyelik tampon
- * var ve kullanici cogu zaman hicbir kesinti gormez. Saglikli oynatmada
- * arabellek hedefine yakin durur (varsayilan 30 sn), bu yuzden esik yanlis
- * alarm uretmez. Acilista da uretmez: arabellek artarken "artmiyor"
- * kosulu saglanmaz.
+ * var ve kullanici cogu zaman hicbir kesinti gormez.
+ *
+ * Xtream HLS akislarinda segmentler genellikle 2 saniyedir; oynatici
+ * normalde 3-4 segment onbellekler (6-8 sn). 5 saniyelik esik bu araliga
+ * girip yanlis alarm uretiyordu: oynatici donmamis olsa da watchdog
+ * seekToDefaultPosition cagirip yayini birkac saniye geri atiyordu.
+ * 2 saniyeye dusurulunce yalnizca arabellek gercekten bos oldugunda tetiklenir.
  */
-private const val LIVE_LOW_BUFFER_MS = 5_000L
+private const val LIVE_LOW_BUFFER_MS = 2_000L
 
 /**
  * Yeniden baglanma denemeleri arasindaki artan bekleme.
