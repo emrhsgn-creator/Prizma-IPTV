@@ -598,9 +598,9 @@ fun PlayerScreen(
         // kullaniciya yansir. Canli icin kucuk ve sabit bir arabellek
         // kullaniyoruz: WiFi titremesine karsi 10 sn yeterli, 20 sn
         // maksimumla uygulama gecikmesi 20 snin altinda kalir.
-        val minMs = if (live) 10_000 else sec * 1000
-        val maxMs = if (live) 20_000 else sec * 2000
-        val resumeMs = if (live) 5_000 else 3000
+        val minMs = if (live) 15_000 else sec * 1000
+        val maxMs = if (live) 40_000 else sec * 2000
+        val resumeMs = if (live) 7_000 else 3000
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(minMs, maxMs, 1500, resumeMs)
             .build()
