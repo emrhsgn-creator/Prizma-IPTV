@@ -592,22 +592,15 @@ fun PlayerScreen(
             .setTsExtractorTimestampSearchBytes(1500 * 188)
 
         val sec = Prefs.bufferSeconds(ctx).coerceAtLeast(5)
-        val minMs = sec * 1000
-        val maxMs = sec * 2000
-        // Olculen desen: arabellek sifira iniyor, oynatici yalnizca 3 saniye
-        // birikince devam ediyor ve kisa surede yine kuruyor. Dort donmanin
-        // yalnizca birinde baglanti hatasi vardi, yani sorun kopma degil,
-        // besleme hizinin yayin bit hizina cok yakin olmasi. Canli yayinda
-        // devam esigini yukseltmek, cok sayida kisa donma yerine daha az ama
-        // sonrasi daha dayanikli bir bekleme birakiyor. Yalnizca ne zaman
-        // devam edilecegini degistirir; cozucu ve kaynak yoluna dokunmaz.
-        //
-        // Devam esigi artik secilen arabellege oranli. Sabit 10 saniye,
-        // ayarlardaki "Düşük (10s)" secimiyle minBufferMs'e esitleniyordu:
-        // her donmadan sonra oynatici arabellegin TAMAMI dolana kadar
-        // bekliyordu, ustelik maxBuffer yalnizca 20 saniyeydi. Yani "Düşük",
-        // donma suresini azaltmak yerine azamiye cikariyordu.
-        val resumeMs = if (live) (minMs / 2).coerceIn(2000, LIVE_RESUME_MS) else 3000
+        // Canli yayinda VOD arabellegi kullanilirsa gecikme birikir.
+        // Sunucu TS verisini burst halinde gonderince oynatici maxBuffer
+        // kadar (varsayilan 60 sn) ileriden okur; bu gecikme dogrudan
+        // kullaniciya yansir. Canli icin kucuk ve sabit bir arabellek
+        // kullaniyoruz: WiFi titremesine karsi 10 sn yeterli, 20 sn
+        // maksimumla uygulama gecikmesi 20 snin altinda kalir.
+        val minMs = if (live) 10_000 else sec * 1000
+        val maxMs = if (live) 20_000 else sec * 2000
+        val resumeMs = if (live) 5_000 else 3000
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(minMs, maxMs, 1500, resumeMs)
             .build()
@@ -652,14 +645,20 @@ fun PlayerScreen(
                 // 0 secildiginde hic uygulanmaz, yani oynaticinin kendi secimi
                 // korunur.
                 val offsetSec = Prefs.liveOffsetSeconds(ctx)
+                // HLS canli yayinda hedef gecikme: kullanici degeri ayarlamissa
+                // onu kullan, yoksa 15 sn varsayilan. 15 sn, playlist boyutundan
+                // bagimsiz olarak ExoPlayer'in canli kenara yakin baslamasini
+                // saglar. 0 birakilirsa ExoPlayer kendi secimini yapar ve bu
+                // cogunlukla 30-60 sn gecikmeli bir pozisyon olur.
+                val hlsTargetMs = if (offsetSec > 0) offsetSec * 1000L else 15_000L
                 setMediaItems(
                     urls.map { u ->
-                        if (live && offsetSec > 0) {
+                        if (live) {
                             MediaItem.Builder()
                                 .setUri(u)
                                 .setLiveConfiguration(
                                     MediaItem.LiveConfiguration.Builder()
-                                        .setTargetOffsetMs(offsetSec * 1000L)
+                                        .setTargetOffsetMs(hlsTargetMs)
                                         .build()
                                 )
                                 .build()
